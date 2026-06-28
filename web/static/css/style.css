@@ -80,6 +80,11 @@ body {
 .logo-icon {
     width: 40px;
     height: 40px;
+    border-radius: 10px;
+    object-fit: cover;
+    background: linear-gradient(135deg, #73abff, #5896f1);
+    padding: 4px;
+    box-sizing: border-box;
 }
 
 .brand h1 {
