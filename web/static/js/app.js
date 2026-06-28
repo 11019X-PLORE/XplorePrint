@@ -12,14 +12,28 @@ class PrinterApp {
         this.queue = [];
         this.filaments = [];
         this.currentView = 'dashboard';
+        this._loadingHidden = false;
         this.init();
     }
 
     init() {
+        this.loadSettings();
         this.bindNavigation();
         this.bindSocket();
         this.loadPrinters();
         setInterval(() => this.loadStats(), 5000);
+        setInterval(() => this.refreshAMSData(), 10000);
+        setTimeout(() => this.hideLoadingScreen(), 8000);
+    }
+
+    hideLoadingScreen() {
+        if (this._loadingHidden) return;
+        this._loadingHidden = true;
+        const el = document.getElementById('loadingScreen');
+        if (el) {
+            el.classList.add('hidden');
+            setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+        }
     }
 
     bindNavigation() {
@@ -100,9 +114,12 @@ class PrinterApp {
             const res = await fetch('/api/printers');
             this.printers = await res.json();
             this.renderDashboard();
+            this.updateDiagPrinterList();
             this.loadStats();
+            this.hideLoadingScreen();
         } catch (e) {
             console.error('Failed to load printers:', e);
+            this.hideLoadingScreen();
         }
     }
 
@@ -625,6 +642,149 @@ class PrinterApp {
         } catch (e) {
             this.showToast('拖拽排序失败', 'error');
         }
+    }
+
+    // ==================== 智能调度 ====================
+
+    async previewSchedule() {
+        const btn = document.getElementById('btnPreviewSchedule');
+        const badge = document.getElementById('scheduleBadge');
+        const body = document.getElementById('schedulePanelBody');
+        btn.disabled = true;
+        btn.textContent = '计算中...';
+        try {
+            const res = await fetch('/api/schedule/preview');
+            const data = await res.json();
+            this._scheduleData = data;
+            badge.textContent = `${data.total_jobs} 个任务`;
+            badge.className = 'badge badge-success';
+
+            let html = '';
+            if (data.plan && data.plan.length > 0) {
+                html += '<div class="schedule-plan">';
+                data.plan.forEach((printerPlan, idx) => {
+                    const statusClass = printerPlan.printer_status === 'idle' ? 'idle' :
+                        printerPlan.printer_status === 'printing' ? 'printing' : 'other';
+                    html += `
+                        <div class="schedule-printer-group">
+                            <div class="schedule-printer-header">
+                                <span class="printer-dot ${statusClass}"></span>
+                                <strong>${printerPlan.printer_name}</strong>
+                                <span class="schedule-printer-status">${this.statusLabel(printerPlan.printer_status)}</span>
+                            </div>
+                            <div class="schedule-items">
+                    `;
+                    printerPlan.items.forEach((item, i) => {
+                        const timeStr = this.formatTime(item.estimated_time * 60);
+                        const scoreColor = item.score_total >= 70 ? 'var(--green)' :
+                            item.score_total >= 40 ? 'var(--yellow)' : 'var(--red)';
+                        html += `
+                            <div class="schedule-item ${i === 0 ? 'schedule-item-next' : ''}">
+                                <div class="schedule-item-rank">${i + 1}</div>
+                                <div class="schedule-item-info">
+                                    <div class="schedule-item-name" title="${item.file_name}">${item.file_name}</div>
+                                    <div class="schedule-item-meta">
+                                        ${item.subsystem ? `<span class="tag tag-subsystem">${item.subsystem}</span>` : ''}
+                                        <span>⏱ ${timeStr}</span>
+                                        <span>⭐ ${item.priority}</span>
+                                        <span>🧵 ${item.material}</span>
+                                    </div>
+                                </div>
+                                <div class="schedule-item-score" style="color:${scoreColor}">
+                                    <div class="score-value">${item.score_total}</div>
+                                    <div class="score-label">排分</div>
+                                </div>
+                                <div class="schedule-item-breakdown">
+                                    <span title="优先级">P:${item.score_priority}</span>
+                                    <span title="时长">T:${item.score_time}</span>
+                                    <span title="打印机">M:${item.score_printer}</span>
+                                    <span title="子系统">S:${item.score_subsystem}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += `</div></div>`;
+                });
+                html += '</div>';
+
+                html += `
+                    <div class="schedule-legend">
+                        <span>排分 = P×40% + T×25% + M×20% + S×15%</span>
+                        <span>P=优先级 T=时长 M=打印机状态 S=子系统连续性</span>
+                    </div>
+                `;
+            } else {
+                html = '<p class="schedule-hint">暂无待打印任务。</p>';
+            }
+            body.innerHTML = html;
+            this.showToast(`排分计算完成，共 ${data.total_jobs} 个任务`, 'success');
+        } catch (e) {
+            body.innerHTML = '<p class="schedule-hint" style="color:var(--red);">计算失败，请重试。</p>';
+            this.showToast('排分计算失败', 'error');
+        }
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>计算排分`;
+    }
+
+    async applySchedule() {
+        const btn = document.getElementById('btnApplySchedule');
+        btn.disabled = true;
+        btn.textContent = '应用中...';
+        try {
+            const res = await fetch('/api/schedule/apply', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                this.queue = data.queue;
+                this.renderQueue();
+                this.showToast('智能调度已应用，队列已重新排序', 'success');
+            }
+        } catch (e) {
+            this.showToast('应用调度失败', 'error');
+        }
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>应用排序`;
+    }
+
+    async startScheduledJobs() {
+        const btn = document.getElementById('btnStartSchedule');
+        btn.disabled = true;
+        btn.textContent = '启动中...';
+        try {
+            const res = await fetch('/api/schedule/start', { method: 'POST' });
+            const data = await res.json();
+            const started = data.started || [];
+            const skipped = data.skipped || [];
+            const errors = data.errors || [];
+
+            if (started.length > 0) {
+                const names = started.map(s => `${s.printer_name}: ${s.file}`).join(', ');
+                this.showToast(`已启动: ${names}`, 'success');
+            }
+            if (skipped.length > 0) {
+                const reasons = skipped.map(s => `${s.printer_name}: ${s.reason}`).join('; ');
+                this.showToast(`跳过: ${reasons}`, 'info');
+            }
+            if (errors.length > 0) {
+                errors.forEach(e => this.showToast(`错误: ${e.file} - ${e.reason}`, 'error'));
+            }
+            if (started.length === 0 && errors.length === 0) {
+                this.showToast('没有可启动的任务', 'info');
+            }
+            this.loadPrinters();
+        } catch (e) {
+            this.showToast('启动失败', 'error');
+        }
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>确认开打`;
+    }
+
+    statusLabel(status) {
+        const map = {
+            'idle': '空闲', 'online': '在线', 'printing': '打印中',
+            'paused': '已暂停', 'error': '错误', 'finishing': '完成中',
+            'offline': '离线',
+        };
+        return map[status] || status;
     }
 
     // ==================== 耗材库存 ====================
@@ -1526,7 +1686,154 @@ class PrinterApp {
             toast.style.transform = 'translateX(100%)';
             toast.style.transition = '0.3s ease';
             setTimeout(() => toast.remove(), 300);
-        }, 3000);
+        }, this._settings.toastDuration * 1000 || 3000);
+    }
+
+    // ==================== 设置 ====================
+
+    saveSetting(key, value) {
+        this._settings = this._settings || {};
+        this._settings[key] = value;
+        try {
+            localStorage.setItem('xploreprint_settings', JSON.stringify(this._settings));
+        } catch (e) { /* ignore */ }
+        this.showToast('设置已保存', 'success');
+    }
+
+    loadSettings() {
+        try {
+            this._settings = JSON.parse(localStorage.getItem('xploreprint_settings')) || {};
+        } catch (e) {
+            this._settings = {};
+        }
+        this._settings.toastDuration = parseInt(this._settings.toastDuration) || 3;
+        this._settings.refreshInterval = parseInt(this._settings.refreshInterval) || 5;
+        this._settings.tempUnit = this._settings.tempUnit || 'celsius';
+
+        const refreshEl = document.getElementById('settingRefreshInterval');
+        if (refreshEl) refreshEl.value = this._settings.refreshInterval;
+        const tempEl = document.getElementById('settingTempUnit');
+        if (tempEl) tempEl.value = this._settings.tempUnit;
+        const toastEl = document.getElementById('settingToastDuration');
+        if (toastEl) toastEl.value = this._settings.toastDuration;
+    }
+
+    // ==================== 诊断测试 ====================
+
+    async runServerPing() {
+        const resultEl = document.getElementById('serverPingResult');
+        const btn = document.getElementById('serverPingBtn');
+        const valueEl = resultEl.querySelector('.diag-value');
+        btn.disabled = true;
+        btn.textContent = '测试中...';
+        valueEl.textContent = '...';
+        valueEl.className = 'diag-value';
+
+        const t0 = performance.now();
+        try {
+            const resp = await fetch('/api/diagnostics/ping');
+            const t1 = performance.now();
+            const data = await resp.json();
+            const rtt = Math.round(t1 - t0);
+            valueEl.textContent = rtt;
+            valueEl.className = rtt < 50 ? 'diag-value good' : rtt < 200 ? 'diag-value warn' : 'diag-value bad';
+            this.showToast(`服务器延迟: ${rtt}ms`, 'info');
+        } catch (e) {
+            valueEl.textContent = '失败';
+            valueEl.className = 'diag-value bad';
+            this.showToast('服务器连接失败', 'error');
+        }
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>开始测试`;
+    }
+
+    async runPrinterPing() {
+        const printerId = document.getElementById('diagPrinterSelect').value;
+        if (!printerId) {
+            this.showToast('请先选择打印机', 'error');
+            return;
+        }
+        const resultEl = document.getElementById('printerPingResult');
+        const btn = document.getElementById('printerPingBtn');
+        const valueEl = resultEl.querySelector('.diag-value');
+        btn.disabled = true;
+        btn.textContent = '测试中...';
+        valueEl.textContent = '...';
+        valueEl.className = 'diag-value';
+
+        try {
+            const resp = await fetch('/api/diagnostics/printer-latency', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ printer_id: printerId }),
+            });
+            const data = await resp.json();
+            if (data.success) {
+                const ms = data.printer_response_ms || data.latency_ms;
+                valueEl.textContent = ms;
+                valueEl.className = ms < 100 ? 'diag-value good' : ms < 500 ? 'diag-value warn' : 'diag-value bad';
+                this.showToast(`打印机延迟: ${ms}ms`, 'success');
+            } else {
+                valueEl.textContent = '失败';
+                valueEl.className = 'diag-value bad';
+                this.showToast(data.message || '测试失败', 'error');
+            }
+        } catch (e) {
+            valueEl.textContent = '失败';
+            valueEl.className = 'diag-value bad';
+            this.showToast('请求失败', 'error');
+        }
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>开始测试`;
+    }
+
+    updateDiagPrinterList() {
+        const select = document.getElementById('diagPrinterSelect');
+        if (!select) return;
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">选择打印机...</option>';
+        this.printers.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            if (p.id === currentVal) opt.selected = true;
+            select.appendChild(opt);
+        });
+    }
+
+    async refreshAMSData() {
+        const onlinePrinters = this.printers.filter(p => p.status !== 'offline');
+        for (const printer of onlinePrinters) {
+            try {
+                const resp = await fetch(`/api/printers/${printer.id}/ams`);
+                const amsData = await resp.json();
+                if (amsData && amsData.length > 0) {
+                    const amsUnits = [];
+                    amsData.forEach(ams => {
+                        ams.trays.forEach(tray => {
+                            const color = tray.color || '#CCCCCC';
+                            const material = tray.material || 'Unknown';
+                            const materialClean = material.includes('_') ? material.split('_').pop() : material;
+                            amsUnits.push({
+                                tray_id: parseInt(`${ams.ams_id}${tray.tray_id}`),
+                                color: color,
+                                material: materialClean,
+                                temperature: ams.temperature || 0,
+                                remaining: 100,
+                            });
+                        });
+                    });
+                    if (amsUnits.length > 0) {
+                        const existing = this.printers.find(p => p.id === printer.id);
+                        if (existing) {
+                            existing.ams_units = amsUnits;
+                        }
+                    }
+                }
+            } catch (e) {
+                /* silent fail - AMS data may not be available */
+            }
+        }
     }
 
     // ==================== 打印操作台 ====================

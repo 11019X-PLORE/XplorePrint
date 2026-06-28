@@ -12,6 +12,7 @@ import csv
 import io
 import logging
 import threading
+import time
 import uuid
 from collections import deque
 from datetime import datetime
@@ -47,6 +48,10 @@ class PrinterManager:
         self._lock = threading.Lock()
         self._callbacks: list = []
         self._prev_status: dict[str, PrinterStatus] = {}
+        self._ams_cache: dict[str, list[dict]] = {}
+        self._ams_cache_file = os.path.join(DATA_DIR, "ams_cache.json")
+        self._last_ams_save: dict[str, float] = {}
+        self._load_ams_cache()
 
         os.makedirs(DATA_DIR, exist_ok=True)
         self._load_config()
@@ -287,6 +292,8 @@ class PrinterManager:
             self._clients[printer_id].disconnect()
         client = BambuClient(printer)
         client.register_callback(lambda p: self._on_printer_update(p))
+        if printer_id in self._ams_cache:
+            client.load_cached_ams(self._ams_cache[printer_id])
         client.connect()
         self._clients[printer_id] = client
 
@@ -308,7 +315,21 @@ class PrinterManager:
                 self._record_print_completion(printer, success=False)
             self._prev_status[printer.id] = new_status
 
+        self._save_ams_periodic(printer)
+
         self._notify()
+
+    def _save_ams_periodic(self, printer: Printer):
+        now = time.time()
+        last = self._last_ams_save.get(printer.id, 0)
+        if now - last < 10:
+            return
+        if printer.ams_units:
+            client = self._clients.get(printer.id)
+            if client and client._cached_ams_data:
+                self._ams_cache[printer.id] = client._cached_ams_data
+                self._last_ams_save[printer.id] = now
+                self._save_ams_cache()
 
     def _record_print_completion(self, printer: Printer, success: bool):
         if not printer.current_file:
@@ -462,6 +483,12 @@ class PrinterManager:
         ok = client.delete_file(filename)
         return {"success": ok, "message": "删除成功" if ok else "删除失败"}
 
+    def test_printer_latency(self, printer_id: str) -> dict:
+        client = self._clients.get(printer_id)
+        if not client:
+            return {"success": False, "message": "打印机未连接"}
+        return client.test_latency()
+
     def start_print(self, printer_id: str, filename: str, plate_number: int = 1,
                     use_ams: bool = True, ams_mapping: list[int] = None,
                     flow_calibration: bool = True) -> dict:
@@ -587,6 +614,212 @@ class PrinterManager:
         self._save_queue()
         self._notify()
         return self.get_queue()
+
+    def calculate_scores(self) -> list[dict]:
+        """Calculate intelligent scheduling scores for all queue items.
+
+        Scoring dimensions (weighted):
+          - Priority (40%):  priority * 10 → 0..100
+          - Time Efficiency (25%):  shorter print → higher score
+          - Printer Availability (20%):  idle printer → bonus
+          - Subsystem Continuity (15%):  same subsystem → batch bonus
+
+        Returns a list of scored items with breakdown.
+        """
+        waiting = [q for q in self._queue if q.status == QueueStatus.WAITING]
+        if not waiting:
+            return []
+
+        max_time = max((q.estimated_time for q in waiting), default=1) or 1
+        results = []
+
+        for item in waiting:
+            printer = self._printers.get(item.printer_id)
+            priority_score = min(item.priority * 10, 100)
+
+            time_score = 100 * max(0, 1 - item.estimated_time / max(2 * max_time, 1))
+            time_score = round(time_score, 1)
+
+            printer_score = 0
+            if printer:
+                if printer.status == PrinterStatus.IDLE:
+                    printer_score = 100
+                elif printer.status == PrinterStatus.PRINTING:
+                    remaining = printer.print_time_remaining
+                    if remaining > 0 and remaining < 1800:
+                        printer_score = 60
+                    elif remaining >= 1800:
+                        printer_score = 20
+                    else:
+                        printer_score = 30
+                elif printer.status == PrinterStatus.PAUSED:
+                    printer_score = 10
+                elif printer.status == PrinterStatus.FINISHING:
+                    printer_score = 80
+                elif printer.status == PrinterStatus.ERROR:
+                    printer_score = 5
+                elif printer.status == PrinterStatus.ONLINE:
+                    printer_score = 50
+                else:
+                    printer_score = 0
+
+            subsystem_score = 0
+            if printer and printer.current_file and item.subsystem:
+                printing_items = [
+                    q for q in self._queue
+                    if q.printer_id == item.printer_id and q.status == QueueStatus.PRINTING
+                ]
+                for pi in printing_items:
+                    if getattr(pi, 'subsystem', '') == item.subsystem:
+                        subsystem_score = 100
+                        break
+
+            total = round(
+                priority_score * 0.4 +
+                time_score * 0.25 +
+                printer_score * 0.2 +
+                subsystem_score * 0.15,
+                1
+            )
+
+            printer_name = printer.name if printer else "未知"
+            printer_status = printer.status.value if printer else "offline"
+
+            results.append({
+                "id": item.id,
+                "printer_id": item.printer_id,
+                "printer_name": printer_name,
+                "printer_status": printer_status,
+                "file_name": item.file_name,
+                "material": item.material,
+                "estimated_time": item.estimated_time,
+                "priority": item.priority,
+                "subsystem": getattr(item, 'subsystem', ''),
+                "robot_id": getattr(item, 'robot_id', ''),
+                "assigned_to": getattr(item, 'assigned_to', ''),
+                "score_total": total,
+                "score_priority": priority_score,
+                "score_time": time_score,
+                "score_printer": printer_score,
+                "score_subsystem": subsystem_score,
+            })
+
+        results.sort(key=lambda x: -x["score_total"])
+        return results
+
+    def auto_schedule_preview(self) -> dict:
+        """Preview the auto-scheduled queue with scores.
+
+        Returns:
+            dict with "scored_items" (sorted by score) and "plan" (per-printer plan).
+        """
+        scored = self.calculate_scores()
+
+        plan = {}
+        for item in scored:
+            pid = item["printer_id"]
+            if pid not in plan:
+                plan[pid] = {
+                    "printer_id": pid,
+                    "printer_name": item["printer_name"],
+                    "printer_status": item["printer_status"],
+                    "items": [],
+                }
+            plan[pid]["items"].append(item)
+
+        return {
+            "scored_items": scored,
+            "plan": list(plan.values()),
+            "total_jobs": len(scored),
+        }
+
+    def apply_auto_schedule(self) -> list[dict]:
+        """Apply the auto-scheduled order to the queue."""
+        scored = self.calculate_scores()
+        scored_ids = {item["id"] for item in scored}
+        id_to_item = {q.id: q for q in self._queue}
+
+        new_queue = []
+        for item in scored:
+            if item["id"] in id_to_item:
+                new_queue.append(id_to_item.pop(item["id"]))
+
+        for remaining in id_to_item.values():
+            if remaining.status == QueueStatus.WAITING:
+                new_queue.append(remaining)
+            else:
+                new_queue.insert(0, remaining)
+
+        self._queue = new_queue
+        self._save_queue()
+        self._notify()
+        return self.get_queue()
+
+    def start_next_jobs(self) -> dict:
+        """Start the next job on each idle printer that has a waiting queue item.
+
+        Returns:
+            dict with started jobs and any errors.
+        """
+        results = {"started": [], "skipped": [], "errors": []}
+
+        for pid, printer in self._printers.items():
+            if printer.status != PrinterStatus.IDLE:
+                results["skipped"].append({
+                    "printer_id": pid,
+                    "printer_name": printer.name,
+                    "reason": f"打印机状态: {printer.status.value}",
+                })
+                continue
+
+            next_job = next(
+                (q for q in self._queue
+                 if q.printer_id == pid and q.status == QueueStatus.WAITING),
+                None,
+            )
+            if not next_job:
+                results["skipped"].append({
+                    "printer_id": pid,
+                    "printer_name": printer.name,
+                    "reason": "无待打印任务",
+                })
+                continue
+
+            client = self._clients.get(pid)
+            if not client:
+                results["errors"].append({
+                    "printer_id": pid,
+                    "file": next_job.file_name,
+                    "reason": "打印机未连接",
+                })
+                continue
+
+            try:
+                ok = client.start_print_file(next_job.file_name)
+                if ok:
+                    next_job.status = QueueStatus.PRINTING
+                    results["started"].append({
+                        "printer_id": pid,
+                        "printer_name": printer.name,
+                        "file": next_job.file_name,
+                        "queue_id": next_job.id,
+                    })
+                else:
+                    results["errors"].append({
+                        "printer_id": pid,
+                        "file": next_job.file_name,
+                        "reason": "启动失败",
+                    })
+            except Exception as e:
+                results["errors"].append({
+                    "printer_id": pid,
+                    "file": next_job.file_name,
+                    "reason": str(e),
+                })
+
+        self._save_queue()
+        self._notify()
+        return results
 
     def get_queue(self, printer_id: str = None) -> list[dict]:
         items = self._queue
@@ -807,6 +1040,22 @@ class PrinterManager:
         else:
             self._parts_library: list[PartTemplate] = []
             self._save_parts_library()
+
+    def _save_ams_cache(self):
+        try:
+            with open(self._ams_cache_file, "w", encoding="utf-8") as f:
+                json.dump(self._ams_cache, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save AMS cache: {e}")
+
+    def _load_ams_cache(self):
+        if os.path.exists(self._ams_cache_file):
+            try:
+                with open(self._ams_cache_file, "r", encoding="utf-8") as f:
+                    self._ams_cache = json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load AMS cache: {e}")
+                self._ams_cache = {}
 
     def _load_parts_library(self):
         path = os.path.join(DATA_DIR, "parts_library.json")

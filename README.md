@@ -40,16 +40,17 @@
 ### 打印操作台
 - 暂停 / 恢复 / 停止打印
 - 喷嘴 / 热床温度调节
-- 风扇速度控制
+- **部件散热风扇** / **辅助风扇** / **机箱风扇** 三风扇独立控制（滑块 + 预设 + 应用按钮）
 - 打印速度切换：**50%** / **100%** / **124%** / **166%**
 - LED 开关
 - 自定义 G-code 发送
-- 轴移动控制（X/Y/Z/Home）
+- **操纵杆式 XYZ 轴移动**（±1mm / ±10mm 步长切换，十字键布局 + 归位按钮）
 - 摄像头实时流预览
 
 ### AMS 预览
 - 显示所有 AMS 单元插槽
 - 耗材颜色、材料类型、剩余百分比
+- **内存缓存 + 文件持久化**：AMS 数据缓存到 `data/ams_cache.json`，断连或重启后自动恢复，避免显示闪烁
 
 ### 文件管理
 - 拖拽上传 `.gcode` / `.3mf` / `.gcode.3mf` 文件到打印机
@@ -61,6 +62,10 @@
 - 优先级排序、预估时间
 - 关联 FRC 机器人、子系统、队员分配
 - 零件状态标记（待打印 → 打印中 → 已完成 → 已装机）
+- **手动拖拽排序**（拖拽手柄调整队列顺序）
+- **智能排序**（按子系统分组 + 优先级 + 时间）
+- 默认排序（优先级 + 时间）
+- **智能调度（奖惩机制）**：根据优先级(40%)、打印时长(25%)、打印机状态(20%)、子系统连续性(15%) 自动计算排分，一键排序并确认开打
 
 ### 打印历史
 - 打印记录列表（文件名、耗时、材料、层数、成败）
@@ -140,6 +145,8 @@ python app.py
 
 访问 `http://localhost:5000`
 
+> **Windows 用户**：也可双击 `server_control.bat` 使用图形化菜单管理服务器（启动/停止/重启/打开浏览器）。
+
 ---
 
 ## 项目结构
@@ -147,6 +154,7 @@ python app.py
 ```
 XplorePrint/
 ├── app.py                          # Flask 主应用 + API 路由
+├── server_control.bat              # Windows 服务器管理小工具（启动/停止/重启）
 ├── config.json                     # 打印机配置
 ├── requirements.txt                # Python 依赖
 ├── data/                           # 持久化数据目录
@@ -191,6 +199,11 @@ XplorePrint/
 | DELETE | `/api/printers/<id>/files/<name>` | 删除文件 |
 | GET | `/api/queue` | 打印队列 |
 | POST | `/api/queue` | 添加队列任务 |
+| POST | `/api/queue/sort` | 队列排序（default / smart） |
+| POST | `/api/queue/reorder` | 手动拖拽重排队列 |
+| GET | `/api/schedule/preview` | 智能调度排分预览 |
+| POST | `/api/schedule/apply` | 应用智能调度排序 |
+| POST | `/api/schedule/start` | 确认开打 |
 | GET | `/api/history` | 打印历史 |
 | GET | `/api/filaments` | 耗材库存 |
 | GET | `/api/robots` | 机器人列表 |

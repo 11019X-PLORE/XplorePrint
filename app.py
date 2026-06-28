@@ -261,6 +261,28 @@ def reorder_queue():
     return jsonify({"status": "ok", "queue": result})
 
 
+# ==================== 智能调度 API ====================
+
+@app.route("/api/schedule/preview", methods=["GET"])
+def schedule_preview():
+    preview = manager.auto_schedule_preview()
+    return jsonify(preview)
+
+
+@app.route("/api/schedule/apply", methods=["POST"])
+def schedule_apply():
+    queue = manager.apply_auto_schedule()
+    return jsonify({"status": "ok", "queue": queue})
+
+
+@app.route("/api/schedule/start", methods=["POST"])
+def schedule_start():
+    result = manager.start_next_jobs()
+    return jsonify(result)
+
+
+# ==================== 队列文件上传 ====================
+
 @app.route("/api/queue/upload", methods=["POST"])
 def upload_queue_file():
     if "file" not in request.files:
@@ -277,6 +299,32 @@ def upload_queue_file():
     save_path = _os.path.join(queue_dir, safe_name)
     file.save(save_path)
     return jsonify({"success": True, "path": save_path, "filename": file.filename})
+
+
+# ==================== 诊断 API ====================
+
+@app.route("/api/diagnostics/ping", methods=["GET"])
+def server_ping():
+    import time as _time
+    return jsonify({"status": "ok", "timestamp": _time.time(), "message": "pong"})
+
+
+@app.route("/api/diagnostics/printer-latency", methods=["POST"])
+def printer_latency():
+    data = request.json or {}
+    printer_id = data.get("printer_id", "")
+    if not printer_id:
+        return jsonify({"success": False, "message": "未指定打印机"}), 400
+    import time as _time
+    t0 = _time.time()
+    result = manager.test_printer_latency(printer_id)
+    elapsed = round((_time.time() - t0) * 1000, 1)
+    return jsonify({
+        "success": result.get("success", False),
+        "latency_ms": elapsed,
+        "printer_response_ms": result.get("printer_response_ms"),
+        "message": result.get("message", ""),
+    })
 
 
 # ==================== 打印历史 API ====================

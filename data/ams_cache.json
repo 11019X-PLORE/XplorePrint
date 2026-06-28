@@ -1,0 +1,43 @@
+{
+  "printer_1_0442": [
+    {
+      "ams_id": 0,
+      "humidity": 4,
+      "temperature": 29.8,
+      "trays": [
+        {
+          "tray_id": 0,
+          "color": "#FFFFFFFF",
+          "material": "PLA",
+          "nozzle_temp_min": "190",
+          "nozzle_temp_max": "230",
+          "tray_id_name": "A00-W1"
+        },
+        {
+          "tray_id": 1,
+          "color": "#0086D6FF",
+          "material": "PLA",
+          "nozzle_temp_min": "190",
+          "nozzle_temp_max": "230",
+          "tray_id_name": "A00-B8"
+        },
+        {
+          "tray_id": 2,
+          "color": "#00B1B7FF",
+          "material": "PLA",
+          "nozzle_temp_min": "190",
+          "nozzle_temp_max": "230",
+          "tray_id_name": "A00-B5"
+        },
+        {
+          "tray_id": 3,
+          "color": "#042F56FF",
+          "material": "PLA",
+          "nozzle_temp_min": "190",
+          "nozzle_temp_max": "230",
+          "tray_id_name": "A01-B6"
+        }
+      ]
+    }
+  ]
+}

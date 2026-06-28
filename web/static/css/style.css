@@ -2,6 +2,87 @@
 /* FRC Team 11019 Xplore */
 /* Modern Dark Blue Theme */
 
+/* Loading Screen */
+.loading-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+.loading-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.loading-content {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.loading-benchy {
+    width: 200px;
+    height: 200px;
+    border-radius: 16px;
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.15);
+    animation: benchyFloat 3s ease-in-out infinite;
+}
+
+@keyframes benchyFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+.loading-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 1px;
+}
+
+.loading-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.loading-spinner {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.spinner-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    animation: dotPulse 1.4s ease-in-out infinite;
+}
+
+.spinner-dot:nth-child(2) { animation-delay: 0.2s; }
+.spinner-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dotPulse {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+}
+
+.loading-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
 :root {
     --bg-primary: #0a0e1a;
     --bg-secondary: #111827;
@@ -855,12 +936,338 @@ select.form-input {
     line-height: 1.6;
 }
 
+.settings-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+/* Diagnostics */
+.diagnostics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.diag-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.diag-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.diag-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.diag-card-header h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.diag-card-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.diag-printer-select {
+    margin: 0;
+}
+
+.diag-printer-select .form-input {
+    width: 100%;
+}
+
+.diag-result {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    justify-content: center;
+    padding: 8px 0;
+}
+
+.diag-value {
+    font-size: 36px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    transition: color 0.3s;
+}
+
+.diag-value.good {
+    color: var(--green);
+}
+
+.diag-value.warn {
+    color: var(--yellow);
+}
+
+.diag-value.bad {
+    color: var(--red);
+}
+
+.diag-unit {
+    font-size: 14px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.diag-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+@media (max-width: 768px) {
+    .diagnostics-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .version-info {
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid var(--border-color);
     font-size: 13px;
     color: var(--text-muted);
+}
+
+/* Schedule Panel */
+.schedule-panel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.schedule-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.schedule-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.schedule-panel-title svg {
+    color: var(--accent-blue);
+}
+
+.schedule-panel-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.schedule-panel-body {
+    padding: 16px 18px;
+}
+
+.schedule-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 20px 0;
+}
+
+.schedule-plan {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.schedule-printer-group {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.schedule-printer-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    font-size: 13px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.printer-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.printer-dot.idle { background: var(--green); }
+.printer-dot.printing { background: var(--accent-blue); }
+.printer-dot.other { background: var(--text-muted); }
+
+.schedule-printer-status {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 2px 8px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+}
+
+.schedule-items {
+    display: flex;
+    flex-direction: column;
+}
+
+.schedule-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.15s;
+}
+
+.schedule-item:last-child {
+    border-bottom: none;
+}
+
+.schedule-item-next {
+    background: rgba(16, 185, 129, 0.04);
+    border-left: 3px solid var(--green);
+}
+
+.schedule-item-rank {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.schedule-item-next .schedule-item-rank {
+    background: var(--green);
+    color: #fff;
+}
+
+.schedule-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.schedule-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+.schedule-item-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+}
+
+.tag-subsystem {
+    background: rgba(139, 92, 246, 0.12);
+    color: #a78bfa;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.schedule-item-score {
+    text-align: center;
+    flex-shrink: 0;
+    min-width: 48px;
+}
+
+.score-value {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.score-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.schedule-item-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.schedule-legend {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.schedule-legend span:first-child {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+    .schedule-item {
+        flex-wrap: wrap;
+    }
+    .schedule-item-breakdown {
+        flex-direction: row;
+        gap: 6px;
+    }
 }
 
 /* Toast */

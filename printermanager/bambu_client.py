@@ -42,6 +42,7 @@ class BambuClient:
         self._callbacks: list[Callable] = []
         self._poll_thread: Optional[threading.Thread] = None
         self._stop_poll = threading.Event()
+        self._cached_ams_data: list[dict] = []
 
     def register_callback(self, callback: Callable):
         self._callbacks.append(callback)
@@ -176,10 +177,11 @@ class BambuClient:
         try:
             hub = self._api.ams_hub()
             if hub is None or not hub.ams_hub:
-                self.printer.ams_units = []
                 return
             ams_units = []
+            raw_data = []
             for ams_id, ams in hub.ams_hub.items():
+                trays = []
                 for tray_idx, tray in ams.filament_trays.items():
                     color = tray.tray_color
                     if color and not color.startswith("#"):
@@ -195,7 +197,22 @@ class BambuClient:
                         temperature=ams.temperature,
                         remaining=100,
                     ))
+                    trays.append({
+                        "tray_id": tray_idx,
+                        "color": color,
+                        "material": tray.tray_type or "Unknown",
+                        "nozzle_temp_min": tray.nozzle_temp_min,
+                        "nozzle_temp_max": tray.nozzle_temp_max,
+                        "tray_id_name": tray.tray_id_name,
+                    })
+                raw_data.append({
+                    "ams_id": ams_id,
+                    "humidity": ams.humidity,
+                    "temperature": ams.temperature,
+                    "trays": trays,
+                })
             self.printer.ams_units = ams_units
+            self._cached_ams_data = raw_data
         except Exception:
             pass
 
@@ -319,7 +336,7 @@ class BambuClient:
         try:
             hub = self._api.ams_hub()
             if hub is None or not hub.ams_hub:
-                return []
+                return self._cached_ams_data
             result = []
             for ams_id, ams in hub.ams_hub.items():
                 trays = []
@@ -341,10 +358,29 @@ class BambuClient:
                     "temperature": ams.temperature,
                     "trays": trays,
                 })
+            self._cached_ams_data = result
             return result
         except Exception as e:
             logger.debug(f"AMS data error: {e}")
-            return []
+            return self._cached_ams_data
+
+    def load_cached_ams(self, data: list[dict]):
+        self._cached_ams_data = data or []
+        if data:
+            ams_units = []
+            for ams in data:
+                for tray in ams.get("trays", []):
+                    color = tray.get("color", "#CCCCCC")
+                    material = tray.get("material", "Unknown")
+                    material_clean = material.split("_")[-1] if "_" in material else material
+                    ams_units.append(AMSStatus(
+                        tray_id=int(f"{ams['ams_id']}{tray['tray_id']}"),
+                        color=color,
+                        material=material_clean,
+                        temperature=ams.get("temperature", 0),
+                        remaining=100,
+                    ))
+            self.printer.ams_units = ams_units
 
     def start_print_file(self, filename: str, plate_number: int = 1,
                          use_ams: bool = True,
@@ -420,6 +456,22 @@ class BambuClient:
         except Exception as e:
             logger.error(f"Delete failed for {self.printer.name}: {e}")
             return False
+
+    def test_latency(self) -> dict:
+        try:
+            if not self._connected:
+                return {"success": False, "message": "打印机未连接"}
+            t0 = time.time()
+            self._api.ping()
+            t1 = time.time()
+            latency_ms = round((t1 - t0) * 1000, 1)
+            return {
+                "success": True,
+                "printer_response_ms": latency_ms,
+                "message": f"打印机延迟: {latency_ms}ms",
+            }
+        except Exception as e:
+            return {"success": False, "message": f"延迟测试失败: {e}"}
 
     @property
     def is_connected(self) -> bool:
