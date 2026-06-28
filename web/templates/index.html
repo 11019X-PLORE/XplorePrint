@@ -496,7 +496,26 @@
             <form id="queueForm" onsubmit="addQueueItem(event)">
                 <div class="form-group">
                     <label>打印机 *</label>
-                    <select class="form-input" id="queuePrinter" required></select>
+                    <select class="form-input" id="queuePrinter" required onchange="manager.onQueuePrinterChange()"></select>
+                </div>
+                <div class="form-group">
+                    <label>模型文件来源</label>
+                    <div class="queue-file-source">
+                        <div class="queue-file-upload">
+                            <div class="queue-upload-zone" id="queueUploadZone" onclick="document.getElementById('queueFileInput').click()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <span>点击上传 .gcode / .3mf 文件</span>
+                            </div>
+                            <input type="file" id="queueFileInput" accept=".gcode,.3mf,.gcode.3mf" style="display:none;" onchange="manager.onQueueFileSelected()">
+                            <div class="queue-file-info" id="queueFileInfo" style="display:none;"></div>
+                        </div>
+                        <div class="queue-file-or">或</div>
+                        <div class="queue-file-dropdown">
+                            <select class="form-input" id="queueFileSelect" onchange="manager.onQueueFileSelectChange()">
+                                <option value="">从打印机选择已有文件...</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>文件名 *</label>

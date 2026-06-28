@@ -385,6 +385,23 @@ class PrinterApp {
     }
 
     async addQueueItem(data) {
+        if (this._queueFile) {
+            const formData = new FormData();
+            formData.append('file', this._queueFile);
+            formData.append('printer_id', data.printer_id);
+            try {
+                const uploadRes = await fetch('/api/queue/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const uploadResult = await uploadRes.json();
+                if (uploadResult.success) {
+                    data.file_path = uploadResult.path;
+                }
+            } catch (e) {
+                console.error('Queue file upload failed:', e);
+            }
+        }
         try {
             const res = await fetch('/api/queue', {
                 method: 'POST',
@@ -393,6 +410,7 @@ class PrinterApp {
             });
             const result = await res.json();
             if (result.status === 'ok') {
+                this._queueFile = null;
                 this.showToast('已添加到打印队列', 'success');
                 closeQueueModal();
                 this.loadQueue();
@@ -401,6 +419,72 @@ class PrinterApp {
             }
         } catch (e) {
             this.showToast('网络错误', 'error');
+        }
+    }
+
+    onQueuePrinterChange() {
+        const printerId = document.getElementById('queuePrinter').value;
+        this._loadQueueFileDropdown(printerId);
+    }
+
+    async _loadQueueFileDropdown(printerId) {
+        const select = document.getElementById('queueFileSelect');
+        if (!printerId) {
+            select.innerHTML = '<option value="">从打印机选择已有文件...</option>';
+            return;
+        }
+        try {
+            const res = await fetch(`/api/printers/${printerId}/files`);
+            const data = await res.json();
+            let html = '<option value="">从打印机选择已有文件...</option>';
+            if (data.files && data.files.length > 0) {
+                data.files.forEach(f => {
+                    html += `<option value="${this.escapeJs(f)}">${this.escapeHtml(f)}</option>`;
+                });
+            } else {
+                html += '<option value="" disabled>该打印机暂无文件</option>';
+            }
+            select.innerHTML = html;
+        } catch (e) {
+            select.innerHTML = '<option value="">加载失败</option>';
+        }
+    }
+
+    onQueueFileSelected() {
+        const input = document.getElementById('queueFileInput');
+        const file = input.files[0];
+        if (!file) return;
+
+        const validExts = ['.gcode', '.3mf', '.gcode.3mf'];
+        const name = file.name.toLowerCase();
+        const isValid = validExts.some(ext => name.endsWith(ext));
+        if (!isValid) {
+            this.showToast('仅支持 .gcode / .3mf / .gcode.3mf 文件', 'error');
+            input.value = '';
+            return;
+        }
+        if (file.size > 200 * 1024 * 1024) {
+            this.showToast('文件大小不能超过 200MB', 'error');
+            input.value = '';
+            return;
+        }
+
+        this._queueFile = file;
+        document.getElementById('queueFileName').value = file.name;
+        const info = document.getElementById('queueFileInfo');
+        info.style.display = 'block';
+        info.innerHTML = `<span style="color:var(--accent-green);">${this.escapeHtml(file.name)}</span> (${(file.size / 1024 / 1024).toFixed(1)} MB)`;
+        document.getElementById('queueUploadZone').style.borderColor = 'var(--accent-green)';
+    }
+
+    onQueueFileSelectChange() {
+        const filename = document.getElementById('queueFileSelect').value;
+        if (filename) {
+            document.getElementById('queueFileName').value = filename;
+            this._queueFile = null;
+            document.getElementById('queueFileInfo').style.display = 'none';
+            document.getElementById('queueUploadZone').style.borderColor = '';
+            document.getElementById('queueFileInput').value = '';
         }
     }
 
@@ -1600,11 +1684,20 @@ function showQueueModal() {
     if (manager.printers.length === 0) {
         select.innerHTML = '<option value="">请先添加打印机</option>';
     }
+    manager._queueFile = null;
+    document.getElementById('queueFileInfo').style.display = 'none';
+    document.getElementById('queueUploadZone').style.borderColor = '';
+    document.getElementById('queueFileInput').value = '';
+    document.getElementById('queueFileSelect').innerHTML = '<option value="">从打印机选择已有文件...</option>';
     manager.populateRobotSelects();
     document.getElementById('queueModal').classList.add('active');
 }
 
 function closeQueueModal() {
+    manager._queueFile = null;
+    document.getElementById('queueFileInfo').style.display = 'none';
+    document.getElementById('queueUploadZone').style.borderColor = '';
+    document.getElementById('queueFileInput').value = '';
     document.getElementById('queueModal').classList.remove('active');
     document.getElementById('queueForm').reset();
 }

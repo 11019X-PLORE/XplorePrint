@@ -212,6 +212,24 @@ def clear_queue():
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/queue/upload", methods=["POST"])
+def upload_queue_file():
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "未选择文件"}), 400
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"success": False, "message": "未选择文件"}), 400
+
+    import os as _os
+    import uuid as _uuid
+    queue_dir = _os.path.join(_os.path.dirname(__file__), "data", "queue_files")
+    _os.makedirs(queue_dir, exist_ok=True)
+    safe_name = f"{_uuid.uuid4().hex}_{file.filename}"
+    save_path = _os.path.join(queue_dir, safe_name)
+    file.save(save_path)
+    return jsonify({"success": True, "path": save_path, "filename": file.filename})
+
+
 # ==================== 打印历史 API ====================
 
 @app.route("/api/history", methods=["GET"])
