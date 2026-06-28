@@ -245,6 +245,22 @@ def clear_queue():
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/queue/sort", methods=["POST"])
+def sort_queue():
+    data = request.json or {}
+    mode = data.get("mode", "default")
+    result = manager.sort_queue(mode)
+    return jsonify({"status": "ok", "queue": result})
+
+
+@app.route("/api/queue/reorder", methods=["POST"])
+def reorder_queue():
+    data = request.json or {}
+    ordered_ids = data.get("ordered_ids", [])
+    result = manager.reorder_queue(ordered_ids)
+    return jsonify({"status": "ok", "queue": result})
+
+
 @app.route("/api/queue/upload", methods=["POST"])
 def upload_queue_file():
     if "file" not in request.files:

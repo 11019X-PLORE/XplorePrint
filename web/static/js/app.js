@@ -1,4 +1,4 @@
-/**
+﻿/**
  * XplorePrint - Main Application JavaScript
  * FRC Team 11019 Xplore
  * 3D Printer Management Software
@@ -386,7 +386,10 @@ class PrinterApp {
         const priorityLabels = { 0: '', 1: '<span class="priority-badge high">高</span>', 2: '<span class="priority-badge urgent">紧急</span>' };
 
         container.innerHTML = this.queue.map((item, index) => `
-            <div class="queue-item">
+            <div class="queue-item" draggable="true" data-queue-id="${item.id}" data-index="${index}">
+                <div class="queue-drag-handle" title="拖拽排序">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg>
+                </div>
                 <div class="queue-info">
                     <div class="queue-rank">#${index + 1}</div>
                     <div class="queue-detail">
@@ -394,6 +397,7 @@ class PrinterApp {
                         <div class="queue-meta">
                             ${this.escapeHtml(item.printer_name)} · ${this.escapeHtml(item.material)} · ${item.estimated_time ? item.estimated_time + '分钟' : '未知时间'}
                             ${item.notes ? ' · ' + this.escapeHtml(item.notes) : ''}
+                            ${item.subsystem ? ' · <span class="subsystem-tag">' + this.escapeHtml(item.subsystem) + '</span>' : ''}
                         </div>
                     </div>
                 </div>
@@ -406,6 +410,60 @@ class PrinterApp {
                 </div>
             </div>
         `).join('');
+
+        this.bindQueueDragDrop();
+    }
+
+    bindQueueDragDrop() {
+        const items = document.querySelectorAll('.queue-item[draggable]');
+        let draggedItem = null;
+
+        items.forEach(item => {
+            item.addEventListener('dragstart', (e) => {
+                draggedItem = item;
+                item.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', item.dataset.queueId);
+            });
+
+            item.addEventListener('dragend', (e) => {
+                item.classList.remove('dragging');
+                draggedItem = null;
+                document.querySelectorAll('.queue-item').forEach(i => i.classList.remove('drag-over'));
+            });
+
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (item !== draggedItem) {
+                    item.classList.add('drag-over');
+                }
+            });
+
+            item.addEventListener('dragleave', (e) => {
+                item.classList.remove('drag-over');
+            });
+
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                item.classList.remove('drag-over');
+                if (draggedItem && draggedItem !== item) {
+                    const container = document.getElementById('queueContainer');
+                    const allItems = [...container.querySelectorAll('.queue-item[draggable]')];
+                    const fromIndex = allItems.indexOf(draggedItem);
+                    const toIndex = allItems.indexOf(item);
+                    if (fromIndex !== -1 && toIndex !== -1) {
+                        if (fromIndex < toIndex) {
+                            container.insertBefore(draggedItem, item.nextSibling);
+                        } else {
+                            container.insertBefore(draggedItem, item);
+                        }
+                        const newOrder = [...container.querySelectorAll('.queue-item[draggable]')].map(el => el.dataset.queueId);
+                        this.reorderQueue(newOrder);
+                    }
+                }
+            });
+        });
     }
 
     async addQueueItem(data) {
@@ -530,6 +588,42 @@ class PrinterApp {
             this.loadQueue();
         } catch (e) {
             this.showToast('清空失败', 'error');
+        }
+    }
+
+    async sortQueue(mode) {
+        try {
+            const res = await fetch('/api/queue/sort', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode }),
+            });
+            const result = await res.json();
+            if (result.status === 'ok') {
+                this.queue = result.queue;
+                this.renderQueue();
+                const modeNames = { default: '默认排序', smart: '智能排序' };
+                this.showToast(`队列已按${modeNames[mode] || mode}重新排列`, 'info');
+            }
+        } catch (e) {
+            this.showToast('排序失败', 'error');
+        }
+    }
+
+    async reorderQueue(orderedIds) {
+        try {
+            const res = await fetch('/api/queue/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ordered_ids: orderedIds }),
+            });
+            const result = await res.json();
+            if (result.status === 'ok') {
+                this.queue = result.queue;
+                this.renderQueue();
+            }
+        } catch (e) {
+            this.showToast('拖拽排序失败', 'error');
         }
     }
 
@@ -1510,8 +1604,8 @@ class PrinterApp {
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><circle cx="12" cy="12" r="10"/><path d="M12 12v-4a4 4 0 014 4z"/></svg>
                         </div>
                         <div>
-                            <h4>风扇控制</h4>
-                            <div class="ops-card-subtitle">部件散热风扇</div>
+                            <h4>部件散热风扇</h4>
+                            <div class="ops-card-subtitle">打印件散热</div>
                         </div>
                     </div>
                     <div class="fan-control">
@@ -1519,12 +1613,61 @@ class PrinterApp {
                         <input type="range" id="fanSpeedSlider" min="0" max="255" value="128" oninput="document.getElementById('fanSpeedDisplay').textContent = this.value">
                     </div>
                     <div class="fan-presets">
-                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=0;document.getElementById('fanSpeedDisplay').textContent='0';manager.setFanSpeed(0)">关闭</span>
-                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=64;document.getElementById('fanSpeedDisplay').textContent='64';manager.setFanSpeed(64)">25%</span>
-                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=128;document.getElementById('fanSpeedDisplay').textContent='128';manager.setFanSpeed(128)">50%</span>
-                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=192;document.getElementById('fanSpeedDisplay').textContent='192';manager.setFanSpeed(192)">75%</span>
-                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=255;document.getElementById('fanSpeedDisplay').textContent='255';manager.setFanSpeed(255)">100%</span>
+                        <span class="fan-preset" onclick="manager.setFanSpeedUI(0)">关闭</span>
+                        <span class="fan-preset" onclick="manager.setFanSpeedUI(64)">25%</span>
+                        <span class="fan-preset" onclick="manager.setFanSpeedUI(128)">50%</span>
+                        <span class="fan-preset" onclick="manager.setFanSpeedUI(192)">75%</span>
+                        <span class="fan-preset" onclick="manager.setFanSpeedUI(255)">100%</span>
                     </div>
+                    <button class="btn btn-primary btn-sm temp-apply" onclick="manager.applyPartFan()">应用</button>
+                </div>
+
+                <div class="ops-card">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon" style="background:rgba(16,185,129,0.12);color:var(--green);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><circle cx="12" cy="12" r="10"/><path d="M12 12v-4a4 4 0 014 4z"/></svg>
+                        </div>
+                        <div>
+                            <h4>辅助风扇</h4>
+                            <div class="ops-card-subtitle">辅助散热</div>
+                        </div>
+                    </div>
+                    <div class="fan-control">
+                        <span class="fan-speed-display" id="auxFanSpeedDisplay" style="color:var(--green);">128</span>
+                        <input type="range" id="auxFanSpeedSlider" min="0" max="255" value="128" oninput="document.getElementById('auxFanSpeedDisplay').textContent = this.value">
+                    </div>
+                    <div class="fan-presets">
+                        <span class="fan-preset" onclick="manager.setAuxFanSpeedUI(0)">关闭</span>
+                        <span class="fan-preset" onclick="manager.setAuxFanSpeedUI(64)">25%</span>
+                        <span class="fan-preset" onclick="manager.setAuxFanSpeedUI(128)">50%</span>
+                        <span class="fan-preset" onclick="manager.setAuxFanSpeedUI(192)">75%</span>
+                        <span class="fan-preset" onclick="manager.setAuxFanSpeedUI(255)">100%</span>
+                    </div>
+                    <button class="btn btn-primary btn-sm temp-apply" onclick="manager.applyAuxFan()">应用</button>
+                </div>
+
+                <div class="ops-card full-width">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon" style="background:rgba(245,158,11,0.12);color:var(--yellow);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><circle cx="12" cy="12" r="10"/><path d="M12 12v-4a4 4 0 014 4z"/></svg>
+                        </div>
+                        <div>
+                            <h4>机箱风扇</h4>
+                            <div class="ops-card-subtitle">腔体循环</div>
+                        </div>
+                    </div>
+                    <div class="fan-control">
+                        <span class="fan-speed-display" id="chamberFanSpeedDisplay" style="color:var(--yellow);">128</span>
+                        <input type="range" id="chamberFanSpeedSlider" min="0" max="255" value="128" oninput="document.getElementById('chamberFanSpeedDisplay').textContent = this.value">
+                    </div>
+                    <div class="fan-presets">
+                        <span class="fan-preset" onclick="manager.setChamberFanSpeedUI(0)">关闭</span>
+                        <span class="fan-preset" onclick="manager.setChamberFanSpeedUI(64)">25%</span>
+                        <span class="fan-preset" onclick="manager.setChamberFanSpeedUI(128)">50%</span>
+                        <span class="fan-preset" onclick="manager.setChamberFanSpeedUI(192)">75%</span>
+                        <span class="fan-preset" onclick="manager.setChamberFanSpeedUI(255)">100%</span>
+                    </div>
+                    <button class="btn btn-primary btn-sm temp-apply" onclick="manager.applyChamberFan()">应用</button>
                 </div>
 
                 <div class="ops-card">
@@ -1573,21 +1716,32 @@ class PrinterApp {
                     </div>
                 </div>
 
-                <div class="ops-card">
+                <div class="ops-card full-width">
                     <div class="ops-card-header">
                         <div class="ops-card-icon move">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
                         </div>
                         <div>
-                            <h4>轴移动</h4>
-                            <div class="ops-card-subtitle">${isPrinting ? '请先暂停打印' : '归位 / 移动'}</div>
+                            <h4>XYZ 轴移动</h4>
+                            <div class="ops-card-subtitle">${isPrinting ? '请先暂停打印' : '操纵杆式控制 · 步长: <span id="stepDisplay">±1</span>'}</div>
                         </div>
                     </div>
-                    <div class="move-control">
-                        <button class="move-btn danger" onclick="manager.sendCommand('${printer.id}','home')">🏠 归位</button>
-                        <button class="move-btn" onclick="manager.sendCommand('${printer.id}','move_z', {distance: 10})">⬆ Z+10</button>
-                        <button class="move-btn" onclick="manager.sendCommand('${printer.id}','move_z', {distance: -10})">⬇ Z-10</button>
-                        <button class="move-btn" onclick="manager.sendCommand('${printer.id}','move_z', {distance: 50})">⬆ Z+50</button>
+                    <div class="joystick-container">
+                        <div class="joystick-step-selector">
+                            <button class="step-btn active" data-step="1" onclick="manager.setMoveStep(1, this)">±1 mm</button>
+                            <button class="step-btn" data-step="10" onclick="manager.setMoveStep(10, this)">±10 mm</button>
+                        </div>
+                        <div class="joystick-pad">
+                            <button class="joy-btn joy-up" onclick="manager.moveAxis('${printer.id}', 'Y', manager._moveStep || 1)" title="Y+">▲<span>Y+</span></button>
+                            <button class="joy-btn joy-left" onclick="manager.moveAxis('${printer.id}', 'X', -(manager._moveStep || 1))" title="X-">◄<span>X-</span></button>
+                            <button class="joy-btn joy-home" onclick="manager.sendCommand('${printer.id}','home')" title="归位">🏠</button>
+                            <button class="joy-btn joy-right" onclick="manager.moveAxis('${printer.id}', 'X', (manager._moveStep || 1))" title="X+"><span>X+</span>►</button>
+                            <button class="joy-btn joy-down" onclick="manager.moveAxis('${printer.id}', 'Y', -(manager._moveStep || 1))" title="Y-"><span>Y-</span>▼</button>
+                        </div>
+                        <div class="joystick-z-control">
+                            <button class="joy-btn joy-z-up" onclick="manager.moveAxis('${printer.id}', 'Z', (manager._moveStep || 1))" title="Z+">⬆ Z+<span id="zStepUp">1</span></button>
+                            <button class="joy-btn joy-z-down" onclick="manager.moveAxis('${printer.id}', 'Z', -(manager._moveStep || 1))" title="Z-">⬇ Z-<span id="zStepDown">1</span></button>
+                        </div>
                     </div>
                 </div>
 
@@ -1667,7 +1821,77 @@ class PrinterApp {
         const printerId = this._selectedOpsPrinter;
         if (!printerId) return;
         this.sendCommand(printerId, 'set_fan', { speed: parseInt(speed) });
-        this.showToast(`风扇速度已设置为 ${speed}`, 'info');
+        this.showToast(`部件风扇速度已设置为 ${speed}`, 'info');
+    }
+
+    setFanSpeedUI(speed) {
+        document.getElementById('fanSpeedSlider').value = speed;
+        document.getElementById('fanSpeedDisplay').textContent = speed;
+        this.setFanSpeed(speed);
+    }
+
+    setAuxFanSpeed(speed) {
+        const printerId = this._selectedOpsPrinter;
+        if (!printerId) return;
+        this.sendCommand(printerId, 'set_aux_fan', { speed: parseInt(speed) });
+        this.showToast(`辅助风扇速度已设置为 ${speed}`, 'info');
+    }
+
+    setAuxFanSpeedUI(speed) {
+        document.getElementById('auxFanSpeedSlider').value = speed;
+        document.getElementById('auxFanSpeedDisplay').textContent = speed;
+        this.setAuxFanSpeed(speed);
+    }
+
+    setChamberFanSpeed(speed) {
+        const printerId = this._selectedOpsPrinter;
+        if (!printerId) return;
+        this.sendCommand(printerId, 'set_chamber_fan', { speed: parseInt(speed) });
+        this.showToast(`机箱风扇速度已设置为 ${speed}`, 'info');
+    }
+
+    setChamberFanSpeedUI(speed) {
+        document.getElementById('chamberFanSpeedSlider').value = speed;
+        document.getElementById('chamberFanSpeedDisplay').textContent = speed;
+        this.setChamberFanSpeed(speed);
+    }
+
+    applyPartFan() {
+        const speed = parseInt(document.getElementById('fanSpeedSlider').value) || 0;
+        this.setFanSpeed(speed);
+    }
+
+    applyAuxFan() {
+        const speed = parseInt(document.getElementById('auxFanSpeedSlider').value) || 0;
+        this.setAuxFanSpeed(speed);
+    }
+
+    applyChamberFan() {
+        const speed = parseInt(document.getElementById('chamberFanSpeedSlider').value) || 0;
+        this.setChamberFanSpeed(speed);
+    }
+
+    setMoveStep(step, btn) {
+        this._moveStep = step;
+        document.getElementById('stepDisplay').textContent = '±' + step;
+        const zUp = document.getElementById('zStepUp');
+        const zDown = document.getElementById('zStepDown');
+        if (zUp) zUp.textContent = step;
+        if (zDown) zDown.textContent = step;
+        document.querySelectorAll('.step-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+
+    moveAxis(printerId, axis, distance) {
+        if (axis === 'X') {
+            this.sendCommand(printerId, 'move_x', { distance: Math.abs(distance) });
+        } else if (axis === 'Y') {
+            this.sendCommand(printerId, 'move_y', { distance: Math.abs(distance) });
+        } else if (axis === 'Z') {
+            this.sendCommand(printerId, 'move_z', { distance: parseFloat(distance) });
+        }
+        const dir = distance > 0 ? '+' : '';
+        this.showToast(`${axis}轴移动 ${dir}${distance}mm`, 'info');
     }
 
     setSpeed(printerId, level) {

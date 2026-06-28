@@ -211,6 +211,14 @@
                 <header class="page-header">
                     <h2>打印队列</h2>
                     <div class="header-actions">
+                        <button class="btn btn-outline" onclick="manager.sortQueue('default')" title="按优先级和时间排序">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
+                            默认排序
+                        </button>
+                        <button class="btn btn-outline" onclick="manager.sortQueue('smart')" title="按子系统分组智能排序">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/><line x1="12" y1="22" x2="12" y2="15.5"/></svg>
+                            智能排序
+                        </button>
                         <button class="btn btn-outline" onclick="showQueueModal()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             添加任务
@@ -218,13 +226,7 @@
                         <button class="btn btn-outline btn-danger" onclick="manager.clearQueue()">清空队列</button>
                     </div>
                 </header>
-                <div class="queue-container" id="queueContainer">
-                    <div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                        <p>打印队列为空</p>
-                        <span>添加打印任务以管理排队</span>
-                    </div>
-                </div>
+                <div class="queue-container" id="queueContainer"></div>
             </section>
 
             <!-- Parts Library View -->

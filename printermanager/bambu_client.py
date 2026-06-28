@@ -297,6 +297,18 @@ class BambuClient:
         except Exception as e:
             logger.error(f"Set fan speed failed for {self.printer.name}: {e}")
 
+    def set_aux_fan_speed(self, speed: int):
+        try:
+            self._api.set_aux_fan_speed(int(speed))
+        except Exception as e:
+            logger.error(f"Set aux fan speed failed for {self.printer.name}: {e}")
+
+    def set_chamber_fan_speed(self, speed: int):
+        try:
+            self._api.set_chamber_fan_speed(int(speed))
+        except Exception as e:
+            logger.error(f"Set chamber fan speed failed for {self.printer.name}: {e}")
+
     def set_print_speed(self, level: int):
         try:
             self._api.set_print_speed(int(level))

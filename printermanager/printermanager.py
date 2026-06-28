@@ -421,8 +421,16 @@ class PrinterManager:
             client.set_fan_speed(kwargs.get("speed", 128))
         elif command == "set_speed":
             client.set_print_speed(kwargs.get("level", 2))
+        elif command == "move_x":
+            client.move_axis("X", kwargs.get("distance", 10))
+        elif command == "move_y":
+            client.move_axis("Y", kwargs.get("distance", 10))
         elif command == "move_z":
             client.move_axis("Z", kwargs.get("distance", 10))
+        elif command == "set_aux_fan":
+            client.set_aux_fan_speed(kwargs.get("speed", 128))
+        elif command == "set_chamber_fan":
+            client.set_chamber_fan_speed(kwargs.get("speed", 128))
         elif command == "send_gcode":
             client.send_gcode(kwargs.get("gcode", ""))
 
@@ -540,6 +548,45 @@ class PrinterManager:
 
     def _sort_queue(self):
         self._queue.sort(key=lambda x: (-x.priority, x.created_at))
+
+    def sort_queue(self, mode: str = "default"):
+        """Sort the print queue.
+        
+        Args:
+            mode: "default" (priority then time), "smart" (subsystem grouping, 
+                  then priority, then time), "manual" (keep current order)
+        """
+        if mode == "smart":
+            subsystem_order = {
+                "Drivetrain": 0, "Intake": 1, "Shooter": 2,
+                "Climber": 3, "Elevator": 4, "Arm": 5,
+                "Bumper": 6, "Electronics": 7, "Pneumatics": 8,
+                "Structure": 9, "Other": 10, "": 11,
+            }
+            self._queue.sort(key=lambda x: (
+                subsystem_order.get(getattr(x, 'subsystem', '') or '', 11),
+                -x.priority,
+                x.created_at,
+            ))
+        else:
+            self._queue.sort(key=lambda x: (-x.priority, x.created_at))
+        self._save_queue()
+        self._notify()
+        return self.get_queue()
+
+    def reorder_queue(self, ordered_ids: list[str]):
+        """Manually reorder the queue by providing a list of queue item IDs in desired order."""
+        id_to_item = {q.id: q for q in self._queue}
+        new_queue = []
+        for qid in ordered_ids:
+            if qid in id_to_item:
+                new_queue.append(id_to_item.pop(qid))
+        for remaining in id_to_item.values():
+            new_queue.append(remaining)
+        self._queue = new_queue
+        self._save_queue()
+        self._notify()
+        return self.get_queue()
 
     def get_queue(self, printer_id: str = None) -> list[dict]:
         items = self._queue
