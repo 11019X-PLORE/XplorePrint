@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XplorePrint - FRC Team 11019 Xplore | 3D打印机管理</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖨️</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                        <rect width="40" height="40" rx="10" fill="url(#logoGrad)"/>
+                        <path d="M10 28V12l10 5-10 5v6l10-5 10 5-10-5 10-5-10-5v6L10 28z" fill="white" opacity="0.9"/>
+                        <defs>
+                            <linearGradient id="logoGrad" x1="0" y1="0" x2="40" y2="40">
+                                <stop offset="0%" stop-color="#3B82F6"/>
+                                <stop offset="100%" stop-color="#1D4ED8"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div class="brand">
+                    <h1>XplorePrint</h1>
+                    <span class="team-badge">FRC 11019</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-view="dashboard">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    <span>仪表盘</span>
+                </a>
+                <a href="#" class="nav-item" data-view="printers">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                        <path d="M6 14h12v8H6z"/>
+                    </svg>
+                    <span>打印机</span>
+                </a>
+                <a href="#" class="nav-item" data-view="queue">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"/>
+                        <line x1="8" y1="12" x2="21" y2="12"/>
+                        <line x1="8" y1="18" x2="21" y2="18"/>
+                        <line x1="3" y1="6" x2="3.01" y2="6"/>
+                        <line x1="3" y1="12" x2="3.01" y2="12"/>
+                        <line x1="3" y1="18" x2="3.01" y2="18"/>
+                    </svg>
+                    <span>打印队列</span>
+                </a>
+                <a href="#" class="nav-item" data-view="partsLibrary">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+                    </svg>
+                    <span>FRC零件库</span>
+                </a>
+                <a href="#" class="nav-item" data-view="partsBoard">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    <span>零件看板</span>
+                </a>
+                <a href="#" class="nav-item" data-view="filaments">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="12" r="6"/>
+                        <circle cx="12" cy="12" r="2"/>
+                    </svg>
+                    <span>耗材库存</span>
+                </a>
+                <a href="#" class="nav-item" data-view="history">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    <span>打印历史</span>
+                </a>
+                <a href="#" class="nav-item" data-view="competitions">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    <span>比赛管理</span>
+                </a>
+                <a href="#" class="nav-item" data-view="settings">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                    </svg>
+                    <span>设置</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="connection-status">
+                    <span class="status-dot" id="serverStatus"></span>
+                    <span id="serverStatusText">服务器运行中</span>
+                </div>
+                <div class="team-info">
+                    <span>Team 11019</span>
+                    <span class="team-name">Xplore</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard View -->
+            <section id="dashboardView" class="view active">
+                <header class="page-header">
+                    <h2>仪表盘</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" onclick="manager.connectAll()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                            全部连接
+                        </button>
+                        <button class="btn btn-outline" onclick="showAddPrinterModal()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            添加打印机
+                        </button>
+                    </div>
+                </header>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statTotal">0</span>
+                            <span class="stat-label">打印机总数</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statOnline">0</span>
+                            <span class="stat-label">在线</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon purple">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statPrinting">0</span>
+                            <span class="stat-label">打印中</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statError">0</span>
+                            <span class="stat-label">错误</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-title">
+                    <h3>打印机状态</h3>
+                </div>
+                <div class="printer-grid" id="printerGrid">
+                    <div class="empty-state" id="emptyState">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                        <p>暂无打印机</p>
+                        <span>点击"添加打印机"开始管理你的3D打印机</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Printers View -->
+            <section id="printersView" class="view">
+                <header class="page-header">
+                    <h2>打印机管理</h2>
+                    <button class="btn btn-primary" onclick="showAddPrinterModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        添加打印机
+                    </button>
+                </header>
+                <div class="printer-list" id="printerListDetail"></div>
+            </section>
+
+            <!-- Queue View -->
+            <section id="queueView" class="view">
+                <header class="page-header">
+                    <h2>打印队列</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-outline" onclick="showQueueModal()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            添加任务
+                        </button>
+                        <button class="btn btn-outline btn-danger" onclick="manager.clearQueue()">清空队列</button>
+                    </div>
+                </header>
+                <div class="queue-container" id="queueContainer">
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                        <p>打印队列为空</p>
+                        <span>添加打印任务以管理排队</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Parts Library View -->
+            <section id="partsLibraryView" class="view">
+                <header class="page-header">
+                    <h2>FRC零件库</h2>
+                    <span style="font-size:13px;color:var(--text-muted);">预置常用FRC零件模板，快速添加到打印队列</span>
+                </header>
+                <div class="parts-library-toolbar">
+                    <select class="form-input" id="partsCategoryFilter" onchange="manager.filterPartsLibrary()" style="width:200px;">
+                        <option value="">全部类别</option>
+                    </select>
+                </div>
+                <div class="parts-grid" id="partsGrid"></div>
+            </section>
+
+            <!-- Parts Board View -->
+            <section id="partsBoardView" class="view">
+                <header class="page-header">
+                    <h2>零件状态看板</h2>
+                    <div class="header-actions">
+                        <select class="form-input" id="boardRobotFilter" onchange="manager.loadPartsBoard()" style="width:180px;">
+                            <option value="">全部机器人</option>
+                        </select>
+                        <button class="btn btn-outline" onclick="showRobotModal()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            管理机器人
+                        </button>
+                    </div>
+                </header>
+                <div class="kanban-board" id="kanbanBoard">
+                    <div class="kanban-column">
+                        <div class="kanban-column-header needed">待打印</div>
+                        <div class="kanban-column-body" id="kanbanNeeded"></div>
+                    </div>
+                    <div class="kanban-column">
+                        <div class="kanban-column-header printing">打印中</div>
+                        <div class="kanban-column-body" id="kanbanPrinting"></div>
+                    </div>
+                    <div class="kanban-column">
+                        <div class="kanban-column-header done">已完成</div>
+                        <div class="kanban-column-body" id="kanbanDone"></div>
+                    </div>
+                    <div class="kanban-column">
+                        <div class="kanban-column-header installed">已装机</div>
+                        <div class="kanban-column-body" id="kanbanInstalled"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Filaments View -->
+            <section id="filamentsView" class="view">
+                <header class="page-header">
+                    <h2>耗材库存</h2>
+                    <button class="btn btn-primary" onclick="showFilamentModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        添加耗材
+                    </button>
+                </header>
+                <div class="filament-grid" id="filamentGrid">
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                        <p>暂无耗材记录</p>
+                        <span>添加耗材以跟踪库存和使用情况</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- History View -->
+            <section id="historyView" class="view">
+                <header class="page-header">
+                    <h2>打印历史</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-outline" onclick="manager.exportHistory()">导出CSV</button>
+                        <button class="btn btn-outline btn-danger" onclick="manager.clearHistory()">清空记录</button>
+                    </div>
+                </header>
+                <div class="history-stats" id="historyStats"></div>
+                <div class="history-table-container" id="historyTable"></div>
+            </section>
+
+            <!-- Competitions View -->
+            <section id="competitionsView" class="view">
+                <header class="page-header">
+                    <h2>比赛管理</h2>
+                    <button class="btn btn-primary" onclick="showCompetitionModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        添加比赛
+                    </button>
+                </header>
+                <div class="competition-grid" id="competitionGrid"></div>
+            </section>
+
+            <!-- Settings View -->
+            <section id="settingsView" class="view">
+                <header class="page-header">
+                    <h2>设置</h2>
+                </header>
+                <div class="settings-container">
+                    <div class="settings-card">
+                        <h3>队伍信息</h3>
+                        <div class="form-group">
+                            <label>队伍名称</label>
+                            <input type="text" class="form-input" value="Xplore" disabled>
+                        </div>
+                        <div class="form-group">
+                            <label>队伍编号</label>
+                            <input type="text" class="form-input" value="11019" disabled>
+                        </div>
+                    </div>
+                    <div class="settings-card">
+                        <h3>关于 XplorePrint</h3>
+                        <p class="about-text">
+                            XplorePrint 是专为 FRC Team 11019 Xplore 开发的3D打印机管理软件。
+                            支持 Bambu Lab 系列打印机，通过局域网 MQTT 协议进行实时监控和控制。
+                        </p>
+                        <div class="version-info">
+                            <span>版本 1.1.0</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Add Printer Modal -->
+    <div class="modal-overlay" id="addPrinterModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>添加打印机</h3>
+                <button class="modal-close" onclick="closeAddPrinterModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <form id="addPrinterForm" onsubmit="addPrinter(event)">
+                <div class="form-group">
+                    <label>打印机名称 *</label>
+                    <input type="text" class="form-input" id="printerName" placeholder="例如: X1C #1" required>
+                </div>
+                <div class="form-group">
+                    <label>IP 地址 *</label>
+                    <input type="text" class="form-input" id="printerIP" placeholder="例如: 192.168.1.100" required>
+                </div>
+                <div class="form-group">
+                    <label>访问码 (Access Code) *</label>
+                    <input type="password" class="form-input" id="printerCode" placeholder="打印机屏幕上的访问码" required>
+                </div>
+                <div class="form-group">
+                    <label>序列号 (Serial Number)</label>
+                    <input type="text" class="form-input" id="printerSerial" placeholder="例如: 123456789">
+                </div>
+                <div class="form-group">
+                    <label>打印机型号</label>
+                    <select class="form-input" id="printerModel">
+                        <option value="Unknown">自动检测</option>
+                        <option value="X1 Carbon">X1 Carbon</option>
+                        <option value="X1">X1</option>
+                        <option value="P1S">P1S</option>
+                        <option value="P1P">P1P</option>
+                        <option value="A1">A1</option>
+                        <option value="A1 Mini">A1 Mini</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeAddPrinterModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">添加打印机</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Queue Modal -->
+    <div class="modal-overlay" id="queueModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>添加打印任务</h3>
+                <button class="modal-close" onclick="closeQueueModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <form id="queueForm" onsubmit="addQueueItem(event)">
+                <div class="form-group">
+                    <label>打印机 *</label>
+                    <select class="form-input" id="queuePrinter" required></select>
+                </div>
+                <div class="form-group">
+                    <label>文件名 *</label>
+                    <input type="text" class="form-input" id="queueFileName" placeholder="例如: chassis_plate_v2.3mf" required>
+                </div>
+                <div class="form-group">
+                    <label>材料</label>
+                    <select class="form-input" id="queueMaterial">
+                        <option value="PLA">PLA</option>
+                        <option value="PETG">PETG</option>
+                        <option value="ABS">ABS</option>
+                        <option value="ASA">ASA</option>
+                        <option value="TPU">TPU</option>
+                        <option value="PC">PC</option>
+                        <option value="PA">PA</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>预计时间 (分钟)</label>
+                    <input type="number" class="form-input" id="queueTime" placeholder="0" min="0">
+                </div>
+                <div class="form-group">
+                    <label>优先级</label>
+                    <select class="form-input" id="queuePriority">
+                        <option value="0">普通</option>
+                        <option value="1">高</option>
+                        <option value="2">紧急</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" class="form-input" id="queueNotes" placeholder="可选备注">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>机器人</label>
+                        <select class="form-input" id="queueRobotId">
+                            <option value="">不分配</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>子系统</label>
+                        <select class="form-input" id="queueSubsystem">
+                            <option value="">未分类</option>
+                            <option value="Drivetrain">底盘</option>
+                            <option value="Intake">Intake</option>
+                            <option value="Shooter">发射机构</option>
+                            <option value="Climber">爬升机构</option>
+                            <option value="Elevator">升降机构</option>
+                            <option value="Arm">机械臂</option>
+                            <option value="Bumper">保险杠</option>
+                            <option value="Electronics">电气</option>
+                            <option value="Pneumatics">气动</option>
+                            <option value="Structure">结构</option>
+                            <option value="Other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>指派队员</label>
+                    <input type="text" class="form-input" id="queueAssignedTo" placeholder="队员姓名">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeQueueModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">添加到队列</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Filament Modal -->
+    <div class="modal-overlay" id="filamentModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>添加耗材</h3>
+                <button class="modal-close" onclick="closeFilamentModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <form id="filamentForm" onsubmit="addFilament(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>材料 *</label>
+                        <select class="form-input" id="filMaterial" required>
+                            <option value="PLA">PLA</option>
+                            <option value="PETG">PETG</option>
+                            <option value="ABS">ABS</option>
+                            <option value="ASA">ASA</option>
+                            <option value="TPU">TPU</option>
+                            <option value="PC">PC</option>
+                            <option value="PA">PA</option>
+                            <option value="PVA">PVA</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>品牌</label>
+                        <input type="text" class="form-input" id="filBrand" placeholder="例如: Bambu Lab">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>颜色名称</label>
+                        <input type="text" class="form-input" id="filColorName" placeholder="例如: 深蓝色">
+                    </div>
+                    <div class="form-group">
+                        <label>颜色</label>
+                        <input type="color" class="form-input color-input" id="filColor" value="#3B82F6">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>总重量 (g) *</label>
+                        <input type="number" class="form-input" id="filWeight" value="1000" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>价格 (元)</label>
+                        <input type="number" class="form-input" id="filPrice" value="0" min="0" step="0.01">
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeFilamentModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">添加耗材</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Robot Modal -->
+    <div class="modal-overlay" id="robotModal">
+        <div class="modal" style="width:500px;">
+            <div class="modal-header">
+                <h3>机器人管理</h3>
+                <button class="modal-close" onclick="closeRobotModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <form id="robotForm" onsubmit="addRobot(event)">
+                <div class="form-group">
+                    <label>机器人名称 *</label>
+                    <input type="text" class="form-input" id="robotName" placeholder="例如: Competition Bot 2026" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>年份</label>
+                        <input type="text" class="form-input" id="robotYear" value="2026">
+                    </div>
+                    <div class="form-group">
+                        <label>类型</label>
+                        <select class="form-input" id="robotType">
+                            <option value="competition">比赛机</option>
+                            <option value="practice">练习机</option>
+                            <option value="prototype">原型机</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" class="form-input" id="robotNotes" placeholder="可选备注">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeRobotModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">添加机器人</button>
+                </div>
+            </form>
+            <div style="margin-top:16px;border-top:1px solid var(--border-color);padding-top:16px;">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">已有机器人</div>
+                <div id="robotList" style="display:flex;flex-direction:column;gap:6px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Competition Modal -->
+    <div class="modal-overlay" id="competitionModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>添加比赛</h3>
+                <button class="modal-close" onclick="closeCompetitionModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <form id="competitionForm" onsubmit="addCompetition(event)">
+                <div class="form-group">
+                    <label>比赛名称 *</label>
+                    <input type="text" class="form-input" id="compName" placeholder="例如: FRC 深圳区域赛" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>开始日期</label>
+                        <input type="date" class="form-input" id="compStartDate">
+                    </div>
+                    <div class="form-group">
+                        <label>结束日期</label>
+                        <input type="date" class="form-input" id="compEndDate">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>地点</label>
+                    <input type="text" class="form-input" id="compLocation" placeholder="例如: 深圳">
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" class="form-input" id="compNotes" placeholder="可选备注">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeCompetitionModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">添加比赛</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
