@@ -22,7 +22,7 @@ from .models import (
     QueueItem, QueueStatus, PrintHistory, FilamentStock, TemperatureRecord,
     Robot, RobotSubsystem, PartTemplate, PartStatus, Competition
 )
-from .bambu_client import BambuMQTTClient
+from .bambu_client import BambuClient
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class PrinterManager:
 
     def __init__(self):
         self._printers: dict[str, Printer] = {}
-        self._clients: dict[str, BambuMQTTClient] = {}
+        self._clients: dict[str, BambuClient] = {}
         self._jobs: list[PrintJob] = []
         self._queue: list[QueueItem] = []
         self._history: list[PrintHistory] = []
@@ -57,6 +57,13 @@ class PrinterManager:
         self._load_competitions()
         self._init_frc_parts_library()
 
+    @staticmethod
+    def _parse_model(model_str: str) -> PrinterModel:
+        try:
+            return PrinterModel(model_str)
+        except ValueError:
+            return PrinterModel.UNKNOWN
+
     def _load_config(self):
         if os.path.exists(CONFIG_PATH):
             try:
@@ -66,7 +73,7 @@ class PrinterManager:
                     printer = Printer(
                         id=pdata["id"],
                         name=pdata["name"],
-                        model=PrinterModel(pdata.get("model", "Unknown")),
+                        model=self._parse_model(pdata.get("model", "Unknown")),
                         ip_address=pdata.get("ip_address", ""),
                         access_code=pdata.get("access_code", ""),
                         serial_number=pdata.get("serial_number", ""),
@@ -252,7 +259,7 @@ class PrinterManager:
         printer = Printer(
             id=printer_id,
             name=name,
-            model=PrinterModel(model),
+            model=self._parse_model(model),
             ip_address=ip_address,
             access_code=access_code,
             serial_number=serial_number,
@@ -278,7 +285,7 @@ class PrinterManager:
             return
         if printer_id in self._clients:
             self._clients[printer_id].disconnect()
-        client = BambuMQTTClient(printer)
+        client = BambuClient(printer)
         client.register_callback(lambda p: self._on_printer_update(p))
         client.connect()
         self._clients[printer_id] = client
@@ -408,6 +415,50 @@ class PrinterManager:
             client.set_nozzle_temp(kwargs.get("temp", 200))
         elif command == "set_bed_temp":
             client.set_bed_temp(kwargs.get("temp", 60))
+        elif command == "home":
+            client.home_axes()
+        elif command == "set_fan":
+            client.set_fan_speed(kwargs.get("speed", 128))
+        elif command == "set_speed":
+            client.set_print_speed(kwargs.get("level", 2))
+        elif command == "move_z":
+            client.move_axis("Z", kwargs.get("distance", 10))
+        elif command == "send_gcode":
+            client.send_gcode(kwargs.get("gcode", ""))
+
+    def get_ams_data(self, printer_id: str) -> list[dict]:
+        client = self._clients.get(printer_id)
+        if not client:
+            return []
+        return client.get_ams_data()
+
+    def upload_to_printer(self, printer_id: str, local_path: str,
+                          remote_name: str = None,
+                          progress_callback=None) -> dict:
+        client = self._clients.get(printer_id)
+        if not client:
+            return {"success": False, "message": "打印机未连接"}
+        ok = client.upload_file(local_path, remote_name, progress_callback)
+        return {"success": ok, "message": "上传成功" if ok else "上传失败"}
+
+    def list_printer_files(self, printer_id: str) -> list[str]:
+        client = self._clients.get(printer_id)
+        if not client:
+            return []
+        return client.list_files()
+
+    def delete_printer_file(self, printer_id: str, filename: str) -> dict:
+        client = self._clients.get(printer_id)
+        if not client:
+            return {"success": False, "message": "打印机未连接"}
+        ok = client.delete_file(filename)
+        return {"success": ok, "message": "删除成功" if ok else "删除失败"}
+
+    def get_camera_url(self, printer_id: str) -> str:
+        client = self._clients.get(printer_id)
+        if not client:
+            return ""
+        return client.get_camera_url()
 
     def get_stats(self) -> dict:
         printers = self._printers.values()

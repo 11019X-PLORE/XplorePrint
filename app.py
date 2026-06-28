@@ -91,6 +91,11 @@ def get_temperature_history(printer_id):
     return jsonify(manager.get_temperature_history(printer_id, limit))
 
 
+@app.route("/api/printers/<printer_id>/ams", methods=["GET"])
+def get_ams_data(printer_id):
+    return jsonify(manager.get_ams_data(printer_id))
+
+
 @app.route("/api/connect_all", methods=["POST"])
 def connect_all():
     manager.connect_all()
@@ -101,6 +106,39 @@ def connect_all():
 def disconnect_all():
     manager.disconnect_all()
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/printers/<printer_id>/files", methods=["GET"])
+def list_printer_files(printer_id):
+    return jsonify(manager.list_printer_files(printer_id))
+
+
+@app.route("/api/printers/<printer_id>/files/<filename>", methods=["DELETE"])
+def delete_printer_file(printer_id, filename):
+    return jsonify(manager.delete_printer_file(printer_id, filename))
+
+
+@app.route("/api/printers/<printer_id>/upload", methods=["POST"])
+def upload_to_printer(printer_id):
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "未选择文件"}), 400
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"success": False, "message": "未选择文件"}), 400
+
+    import tempfile
+    import os as _os
+    with tempfile.NamedTemporaryFile(delete=False, suffix=_os.path.splitext(file.filename)[1]) as tmp:
+        file.save(tmp.name)
+        result = manager.upload_to_printer(printer_id, tmp.name, file.filename)
+    _os.unlink(tmp.name)
+    return jsonify(result)
+
+
+@app.route("/api/printers/<printer_id>/camera", methods=["GET"])
+def get_camera_url(printer_id):
+    url = manager.get_camera_url(printer_id)
+    return jsonify({"url": url})
 
 
 @app.route("/api/stats", methods=["GET"])

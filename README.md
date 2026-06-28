@@ -37,7 +37,7 @@ XplorePrint/
 │   ├── __init__.py
 │   ├── models.py                   # 数据模型（dataclass）
 │   ├── printermanager.py           # 核心业务逻辑
-│   └── bambu_client.py             # MQTT 通信客户端
+│   └── bambu_client.py             # 官方协议通信客户端
 ├── web/
 │   ├── templates/
 │   │   └── index.html              # 前端页面
@@ -59,9 +59,22 @@ XplorePrint/
 |--------|------|
 | **后端** | Python 3.10+ / Flask / Flask-SocketIO |
 | **实时通信** | Socket.IO（WebSocket） |
-| **打印机协议** | MQTT（paho-mqtt），Bambu Lab LAN 模式 |
+| **打印机协议** | [bambulabs_api](https://github.com/Bambu-Research-Group/bambulabs_api) v2.6 — 社区维护的官方协议封装库 |
+| **状态/控制** | MQTT over TLS（端口 8883）— 与 Bambu Studio/Bambu Handy 相同 |
+| **文件传输** | FTPS（端口 990）— 3MF/gcode 文件传输 |
+| **摄像头** | RTSP（端口 322）— 实时视频流 |
 | **前端** | 原生 HTML/CSS/JavaScript，深色主题 |
 | **数据持久化** | JSON 文件存储 |
+
+### 打印机通信协议
+
+XplorePrint 使用 **[bambulabs_api](https://github.com/Bambu-Research-Group/bambulabs_api)** 库，该库封装了 Bambu Lab 完整 LAN 模式协议，与 Bambu Studio、Bambu Handy 等官方软件完全一致：
+
+| 通道 | 端口 | 协议 | 用途 |
+|------|------|------|------|
+| 状态/控制 | `8883` | MQTT over TLS | 实时状态推送、打印控制指令 |
+| 文件传输 | `990` | FTPS (FTP over TLS) | 3MF/gcode 文件上传/删除 |
+| 视频流 | `322` | RTSP | 摄像头实时画面 |
 
 ---
 
@@ -115,6 +128,10 @@ python app.py
 | POST | `/api/printers/<id>/connect` | 连接打印机 |
 | POST | `/api/printers/<id>/disconnect` | 断开打印机 |
 | POST | `/api/printers/<id>/command` | 发送控制指令 |
+| POST | `/api/printers/<id>/upload` | 上传文件到打印机 (FTPS) |
+| GET | `/api/printers/<id>/files` | 列出打印机存储的文件 |
+| DELETE | `/api/printers/<id>/files/<name>` | 删除打印机上的文件 |
+| GET | `/api/printers/<id>/camera` | 获取摄像头 RTSP 地址 |
 | GET | `/api/printers/<id>/temperature` | 获取温度历史 |
 | POST | `/api/connect_all` | 连接所有打印机 |
 | GET | `/api/stats` | 获取统计信息 |

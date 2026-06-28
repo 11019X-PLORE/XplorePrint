@@ -55,6 +55,8 @@ class PrinterApp {
             this.loadPartsBoard();
         } else if (view === 'competitions') {
             this.loadCompetitions();
+        } else if (view === 'operations') {
+            this.renderOperations();
         }
     }
 
@@ -177,11 +179,21 @@ class PrinterApp {
         if (printer.ams_units && printer.ams_units.length > 0) {
             amsHTML = `
                 <div class="ams-section">
-                    <div class="ams-title">AMS 耗材</div>
+                    <div class="ams-title">AMS 耗材 (${printer.ams_units.length} 槽)</div>
                     <div class="ams-trays">
-                        ${printer.ams_units.map(tray => `
-                            <div class="ams-tray" style="background-color:${tray.color};" title="${tray.material} - ${tray.remaining}%"></div>
-                        `).join('')}
+                        ${printer.ams_units.map(tray => {
+                            const color = tray.color || '#CCCCCC';
+                            const materialShort = (tray.material || 'Unknown').substring(0, 6);
+                            return `
+                                <div class="ams-tray" style="background-color:${color};" title="${tray.material}">
+                                    <span class="ams-tray-id">${tray.tray_id}</span>
+                                    <div class="ams-tray-tooltip">
+                                        <div class="material">${tray.material}</div>
+                                        <div class="temp-range">余量: ${tray.remaining}%</div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
                     </div>
                 </div>
             `;
@@ -1073,6 +1085,280 @@ class PrinterApp {
             toast.style.transition = '0.3s ease';
             setTimeout(() => toast.remove(), 300);
         }, 3000);
+    }
+
+    // ==================== 打印操作台 ====================
+
+    renderOperations() {
+        const container = document.getElementById('operationsContainer');
+        const onlinePrinters = this.printers.filter(p => p.status !== 'offline');
+
+        if (onlinePrinters.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <p>没有在线打印机</p>
+                    <span>请先在仪表盘中连接打印机</span>
+                </div>
+            `;
+            return;
+        }
+
+        const currentPrinterId = container.dataset.selectedPrinter ||
+            (this._selectedOpsPrinter || onlinePrinters[0].id);
+        const printer = onlinePrinters.find(p => p.id === currentPrinterId) || onlinePrinters[0];
+        this._selectedOpsPrinter = printer.id;
+
+        const isPrinting = printer.status === 'printing' || printer.status === 'paused';
+        const isPaused = printer.status === 'paused';
+
+        container.innerHTML = `
+            <div class="operations-printer-select">
+                <select class="form-input" id="opsPrinterSelect">
+                    ${onlinePrinters.map(p => `
+                        <option value="${p.id}" ${p.id === printer.id ? 'selected' : ''}>
+                            ${this.escapeHtml(p.name)} (${p.model}) - ${this.getStatusText(p.status)}
+                        </option>
+                    `).join('')}
+                </select>
+                <button class="btn btn-sm btn-outline" onclick="manager.refreshOperations()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                    刷新
+                </button>
+            </div>
+
+            <div class="ops-grid">
+                <div class="ops-card">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon temp">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
+                        </div>
+                        <div>
+                            <h4>温度控制</h4>
+                            <div class="ops-card-subtitle">当前: 喷头 ${printer.nozzle_temp}°C / 热床 ${printer.bed_temp}°C</div>
+                        </div>
+                    </div>
+                    <div class="temp-control-row">
+                        <span class="temp-control-label">喷头</span>
+                        <div class="temp-control-input">
+                            <input type="range" id="nozzleTempSlider" min="0" max="300" oninput="document.getElementById('nozzleTempInput').value=this.value">
+                            <input type="number" id="nozzleTempInput" min="0" max="300" value="${printer.nozzle_temp || 0}" oninput="document.getElementById('nozzleTempSlider').value=this.value">
+                        </div>
+                        <span class="temp-control-value">°C</span>
+                    </div>
+                    <div class="temp-control-row">
+                        <span class="temp-control-label">热床</span>
+                        <div class="temp-control-input">
+                            <input type="range" id="bedTempSlider" min="0" max="120" oninput="document.getElementById('bedTempInput').value=this.value">
+                            <input type="number" id="bedTempInput" min="0" max="120" value="${printer.bed_temp || 0}" oninput="document.getElementById('bedTempSlider').value=this.value">
+                        </div>
+                        <span class="temp-control-value">°C</span>
+                    </div>
+                    <button class="btn btn-primary btn-sm temp-apply" onclick="manager.applyTemperatures()">应用温度</button>
+                </div>
+
+                <div class="ops-card">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon fan">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><circle cx="12" cy="12" r="10"/><path d="M12 12v-4a4 4 0 014 4z"/></svg>
+                        </div>
+                        <div>
+                            <h4>风扇控制</h4>
+                            <div class="ops-card-subtitle">部件散热风扇</div>
+                        </div>
+                    </div>
+                    <div class="fan-control">
+                        <span class="fan-speed-display" id="fanSpeedDisplay">128</span>
+                        <input type="range" id="fanSpeedSlider" min="0" max="255" value="128" oninput="document.getElementById('fanSpeedDisplay').textContent = this.value">
+                    </div>
+                    <div class="fan-presets">
+                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=0;document.getElementById('fanSpeedDisplay').textContent='0';manager.setFanSpeed(0)">关闭</span>
+                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=64;document.getElementById('fanSpeedDisplay').textContent='64';manager.setFanSpeed(64)">25%</span>
+                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=128;document.getElementById('fanSpeedDisplay').textContent='128';manager.setFanSpeed(128)">50%</span>
+                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=192;document.getElementById('fanSpeedDisplay').textContent='192';manager.setFanSpeed(192)">75%</span>
+                        <span class="fan-preset" onclick="document.getElementById('fanSpeedSlider').value=255;document.getElementById('fanSpeedDisplay').textContent='255';manager.setFanSpeed(255)">100%</span>
+                    </div>
+                </div>
+
+                <div class="ops-card">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon speed">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        </div>
+                        <div>
+                            <h4>打印速度</h4>
+                            <div class="ops-card-subtitle">${isPrinting ? '仅打印中可用' : '打印机空闲'}</div>
+                        </div>
+                    </div>
+                    <div class="speed-control">
+                        <button class="speed-btn" onclick="manager.setSpeed('${printer.id}', 0)">
+                            🐢 低速
+                            <span class="speed-label">Silent</span>
+                        </button>
+                        <button class="speed-btn" onclick="manager.setSpeed('${printer.id}', 1)">
+                            🐇 标准
+                            <span class="speed-label">Normal</span>
+                        </button>
+                        <button class="speed-btn" onclick="manager.setSpeed('${printer.id}', 2)">
+                            🦊 高速
+                            <span class="speed-label">Sport</span>
+                        </button>
+                        <button class="speed-btn" onclick="manager.setSpeed('${printer.id}', 3)">
+                            🚀 极速
+                            <span class="speed-label">Ludicrous</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="ops-card">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon light">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                        </div>
+                        <div>
+                            <h4>LED 灯光</h4>
+                            <div class="ops-card-subtitle">控制打印机照明</div>
+                        </div>
+                    </div>
+                    <div class="light-toggle">
+                        <span class="light-status on" id="lightStatus">开启</span>
+                        <div class="toggle-switch on" id="lightToggle" onclick="manager.toggleLight('${printer.id}')"></div>
+                    </div>
+                </div>
+
+                <div class="ops-card">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon move">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+                        </div>
+                        <div>
+                            <h4>轴移动</h4>
+                            <div class="ops-card-subtitle">${isPrinting ? '请先暂停打印' : '归位 / 移动'}</div>
+                        </div>
+                    </div>
+                    <div class="move-control">
+                        <button class="move-btn danger" onclick="manager.sendCommand('${printer.id}','home')">🏠 归位</button>
+                        <button class="move-btn" onclick="manager.sendCommand('${printer.id}','move_z', {distance: 10})">⬆ Z+10</button>
+                        <button class="move-btn" onclick="manager.sendCommand('${printer.id}','move_z', {distance: -10})">⬇ Z-10</button>
+                        <button class="move-btn" onclick="manager.sendCommand('${printer.id}','move_z', {distance: 50})">⬆ Z+50</button>
+                    </div>
+                </div>
+
+                <div class="ops-card full-width">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon gcode">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        </div>
+                        <div>
+                            <h4>G-code 发送</h4>
+                            <div class="ops-card-subtitle">发送自定义 G-code 指令</div>
+                        </div>
+                    </div>
+                    <div class="gcode-input-row">
+                        <input type="text" id="gcodeInput" placeholder="例如: G28 X Y, M106 S255" onkeydown="if(event.key==='Enter') manager.sendGcode('${printer.id}')">
+                        <button class="btn btn-primary btn-sm" onclick="manager.sendGcode('${printer.id}')">发送</button>
+                    </div>
+                    <div class="gcode-history" id="gcodeHistory"></div>
+                </div>
+
+                ${isPrinting ? `
+                <div class="ops-card full-width">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon" style="background:rgba(245,158,11,0.12);color:var(--yellow);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </div>
+                        <div>
+                            <h4>打印控制</h4>
+                            <div class="ops-card-subtitle">${printer.current_file || '未知文件'} · ${printer.print_progress}%</div>
+                        </div>
+                    </div>
+                    <div class="card-actions" style="margin-top:0;">
+                        ${isPaused ? `
+                            <button class="btn btn-success" onclick="manager.sendCommand('${printer.id}','resume')">▶ 继续打印</button>
+                        ` : `
+                            <button class="btn btn-outline" onclick="manager.sendCommand('${printer.id}','pause')">⏸ 暂停</button>
+                        `}
+                        <button class="btn btn-danger" onclick="manager.sendCommand('${printer.id}','stop')">⏹ 停止</button>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+
+        this.bindOperationsEvents(printer);
+    }
+
+    bindOperationsEvents(printer) {
+        const select = document.getElementById('opsPrinterSelect');
+        if (select) {
+            select.addEventListener('change', (e) => {
+                this._selectedOpsPrinter = e.target.value;
+                this.renderOperations();
+            });
+        }
+    }
+
+    refreshOperations() {
+        this.renderOperations();
+    }
+
+    applyTemperatures() {
+        const printerId = this._selectedOpsPrinter;
+        if (!printerId) return;
+        const nozzleTemp = parseInt(document.getElementById('nozzleTempInput').value) || 0;
+        const bedTemp = parseInt(document.getElementById('bedTempInput').value) || 0;
+        if (nozzleTemp > 0) {
+            this.sendCommand(printerId, 'set_nozzle_temp', { temp: nozzleTemp });
+        }
+        if (bedTemp > 0) {
+            this.sendCommand(printerId, 'set_bed_temp', { temp: bedTemp });
+        }
+        this.showToast(`温度已设置: 喷头 ${nozzleTemp}°C / 热床 ${bedTemp}°C`, 'info');
+    }
+
+    setFanSpeed(speed) {
+        const printerId = this._selectedOpsPrinter;
+        if (!printerId) return;
+        this.sendCommand(printerId, 'set_fan', { speed: parseInt(speed) });
+        this.showToast(`风扇速度已设置为 ${speed}`, 'info');
+    }
+
+    setSpeed(printerId, level) {
+        const labels = ['低速', '标准', '高速', '极速'];
+        this.sendCommand(printerId, 'set_speed', { level });
+        this.showToast(`打印速度已设置为 ${labels[level]}`, 'info');
+    }
+
+    toggleLight(printerId) {
+        const toggle = document.getElementById('lightToggle');
+        const status = document.getElementById('lightStatus');
+        if (toggle && status) {
+            const isOn = toggle.classList.contains('on');
+            if (isOn) {
+                this.sendCommand(printerId, 'led_off');
+                toggle.classList.remove('on');
+                status.classList.remove('on');
+                status.textContent = '关闭';
+            } else {
+                this.sendCommand(printerId, 'led_on');
+                toggle.classList.add('on');
+                status.classList.add('on');
+                status.textContent = '开启';
+            }
+        }
+    }
+
+    sendGcode(printerId) {
+        const input = document.getElementById('gcodeInput');
+        if (!input) return;
+        const gcode = input.value.trim();
+        if (!gcode) return;
+        this.sendCommand(printerId, 'send_gcode', { gcode });
+        this.showToast(`G-code 已发送: ${gcode}`, 'info');
+        const history = document.getElementById('gcodeHistory');
+        if (history) {
+            history.innerHTML = `<span style="color:var(--green);">▶ ${this.escapeHtml(gcode)}</span><br>` + history.innerHTML;
+        }
+        input.value = '';
     }
 }
 

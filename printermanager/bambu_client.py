@@ -1,214 +1,356 @@
 """
-XplorePrint - Bambu Lab MQTT Client
+XplorePrint - Bambu Lab Client (bambulabs_api wrapper)
 FRC Team 11019 Xplore
 
-Communicates with Bambu Lab 3D printers via MQTT protocol in LAN mode.
-Based on the community-documented Bambu Lab MQTT API.
+Wraps the bambulabs_api library for communication with Bambu Lab 3D printers.
+- github.com/Bambu-Research-Group/bambulabs_api
+- Uses MQTT (port 8883) for real-time status and control
+- Uses FTPS (port 990) for file transfer
+- Uses RTSP (port 322) for camera streaming
 """
 
-import json
-import ssl
-import time
-import threading
 import logging
+import threading
+import time
 from typing import Optional, Callable
 
-import paho.mqtt.client as mqtt
+import bambulabs_api as bl
 
 from .models import Printer, PrinterStatus, PrinterModel, AMSStatus
 
 logger = logging.getLogger(__name__)
 
 
-class BambuMQTTClient:
-    """MQTT client for communicating with Bambu Lab printers."""
+class BambuClient:
+    """
+    Bambu Lab printer client using the official bambulabs_api library.
 
-    REPORT_TOPIC = "device/{serial}/report"
+    Manages the connection lifecycle and maps the library's state
+    to our internal Printer data model.
+    """
+
+    POLL_INTERVAL = 2.0
 
     def __init__(self, printer: Printer):
         self.printer = printer
-        self.client = mqtt.Client(
-            client_id=f"xploreprint_{printer.id}",
-            protocol=mqtt.MQTTv311
+        self._api = bl.Printer(
+            ip_address=printer.ip_address,
+            access_code=printer.access_code,
+            serial=printer.serial_number,
         )
-        self.client.username_pw_set("bblp", password=printer.access_code)
-        self.client.tls_set(cert_reqs=ssl.CERT_NONE)
-        self.client.tls_insecure_set(True)
-        self.client.on_connect = self._on_connect
-        self.client.on_message = self._on_message
-        self.client.on_disconnect = self._on_disconnect
         self._connected = False
         self._callbacks: list[Callable] = []
-        self._thread: Optional[threading.Thread] = None
+        self._poll_thread: Optional[threading.Thread] = None
+        self._stop_poll = threading.Event()
 
     def register_callback(self, callback: Callable):
         self._callbacks.append(callback)
 
     def connect(self):
         try:
-            self.client.connect(
-                self.printer.ip_address,
-                port=8883,
-                keepalive=60
-            )
-            self._thread = threading.Thread(
-                target=self._run_loop,
-                daemon=True
-            )
-            self._thread.start()
-            logger.info(
-                f"Connecting to printer {self.printer.name} "
-                f"at {self.printer.ip_address}:8883"
-            )
-        except Exception as e:
-            logger.error(f"Failed to connect to {self.printer.name}: {e}")
-            self.printer.status = PrinterStatus.OFFLINE
-
-    def _run_loop(self):
-        try:
-            self.client.loop_forever()
-        except Exception as e:
-            logger.error(f"MQTT loop error for {self.printer.name}: {e}")
-
-    def disconnect(self):
-        self.client.disconnect()
-        self._connected = False
-        self.printer.status = PrinterStatus.OFFLINE
-
-    def _on_connect(self, client, userdata, flags, rc):
-        if rc == 0:
+            self._api.connect()
             self._connected = True
             self.printer.status = PrinterStatus.ONLINE
-            report_topic = self.REPORT_TOPIC.format(
-                serial=self.printer.serial_number
+
+            self._wait_for_printer_ready()
+
+            self._stop_poll.clear()
+            self._poll_thread = threading.Thread(
+                target=self._poll_loop,
+                daemon=True,
             )
-            client.subscribe(report_topic)
-            logger.info(f"Connected to {self.printer.name}, subscribed to {report_topic}")
-        else:
-            logger.error(f"Connection failed for {self.printer.name}, rc={rc}")
+            self._poll_thread.start()
+            logger.info(
+                f"Connected to {self.printer.name} "
+                f"at {self.printer.ip_address} via bambulabs_api"
+            )
+        except Exception as e:
+            logger.error(f"Connection failed for {self.printer.name}: {e}")
             self.printer.status = PrinterStatus.OFFLINE
+            self._connected = False
 
-    def _on_disconnect(self, client, userdata, rc):
+    def _wait_for_printer_ready(self, timeout: float = 15.0):
+        waited = 0.0
+        while not self._api.mqtt_client_ready():
+            if waited >= timeout:
+                logger.warning(
+                    f"Timeout waiting for {self.printer.name} to report status"
+                )
+                return
+            time.sleep(0.5)
+            waited += 0.5
+        logger.info(f"{self.printer.name} reported initial status (waited {waited:.1f}s)")
+
+    def disconnect(self):
+        self._stop_poll.set()
         self._connected = False
-        self.printer.status = PrinterStatus.OFFLINE
-        logger.warning(f"Disconnected from {self.printer.name}")
-
-    def _on_message(self, client, userdata, msg):
         try:
-            payload = json.loads(msg.payload.decode("utf-8"))
-            self._parse_report(payload)
+            self._api.disconnect()
+        except Exception as e:
+            logger.warning(f"Error disconnecting {self.printer.name}: {e}")
+        self.printer.status = PrinterStatus.OFFLINE
+
+    def _poll_loop(self):
+        while not self._stop_poll.is_set():
+            try:
+                self._update_state()
+            except Exception as e:
+                logger.debug(f"Poll error for {self.printer.name}: {e}")
+            self._stop_poll.wait(self.POLL_INTERVAL)
+
+    def _update_state(self):
+        if not self._connected:
+            return
+        if not self._api.mqtt_client_ready():
+            return
+
+        try:
+            gcode_state = self._api.get_state()
+
+            state_map = {
+                bl.GcodeState.IDLE: PrinterStatus.IDLE,
+                bl.GcodeState.PREPARE: PrinterStatus.PRINTING,
+                bl.GcodeState.RUNNING: PrinterStatus.PRINTING,
+                bl.GcodeState.PAUSE: PrinterStatus.PAUSED,
+                bl.GcodeState.FINISH: PrinterStatus.FINISHING,
+                bl.GcodeState.FAILED: PrinterStatus.ERROR,
+            }
+            self.printer.status = state_map.get(gcode_state, PrinterStatus.IDLE)
+
+            if gcode_state == bl.GcodeState.FAILED:
+                self.printer.error_message = str(self._api.print_error_code)
+
+            self.printer.nozzle_temp = self._safe_float(self._api.get_nozzle_temperature())
+            self.printer.target_nozzle_temp = self._safe_float(
+                self._api.mqtt_client.get_nozzle_temperature_target()
+            )
+            self.printer.bed_temp = self._safe_float(self._api.get_bed_temperature())
+            self.printer.target_bed_temp = self._safe_float(
+                self._api.mqtt_client.get_bed_temperature_target()
+            )
+            self.printer.chamber_temp = self._safe_float(self._api.get_chamber_temperature())
+            self.printer.print_progress = self._safe_float(self._api.get_percentage())
+            self.printer.print_time_remaining = self._safe_time(self._api.get_time())
+            self.printer.current_file = self._safe_str(self._api.get_file_name())
+            self.printer.layer_num = self._safe_int(self._api.current_layer_num())
+            self.printer.total_layers = self._safe_int(self._api.total_layer_num())
+            self.printer.wifi_signal = self._safe_int(self._api.wifi_signal)
+
+            self._update_ams()
+
+            self.printer.last_updated = time.time()
+
             for cb in self._callbacks:
                 cb(self.printer)
-        except json.JSONDecodeError:
-            logger.warning(f"Invalid JSON from {self.printer.name}")
+
         except Exception as e:
-            logger.error(f"Error processing message from {self.printer.name}: {e}")
+            logger.debug(f"State update error for {self.printer.name}: {e}")
 
-    def _parse_report(self, data: dict):
-        print_data = data.get("print", {})
-        self.printer.print_progress = print_data.get("mc_percent", 0)
-        self.printer.layer_num = print_data.get("mc_remaining_layer", 0)
-        self.printer.total_layers = print_data.get("total_layer_num", 0)
-        self.printer.current_file = print_data.get("gcode_file", "")
-        self.printer.print_time_remaining = print_data.get("mc_remaining_time", 0)
+    def _update_ams(self):
+        try:
+            hub = self._api.ams_hub()
+            if hub is None or not hub.ams_hub:
+                self.printer.ams_units = []
+                return
+            ams_units = []
+            for ams_id, ams in hub.ams_hub.items():
+                for tray_idx, tray in ams.filament_trays.items():
+                    color = tray.tray_color
+                    if color and not color.startswith("#"):
+                        color = "#" + color
+                    elif not color:
+                        color = "#CCCCCC"
+                    material = tray.tray_type or "Unknown"
+                    material_clean = material.split("_")[-1] if "_" in material else material
+                    ams_units.append(AMSStatus(
+                        tray_id=int(f"{ams_id}{tray_idx}"),
+                        color=color,
+                        material=material_clean,
+                        temperature=ams.temperature,
+                        remaining=100,
+                    ))
+            self.printer.ams_units = ams_units
+        except Exception:
+            pass
 
-        gcode_state = print_data.get("gcode_state", "").lower()
-        if gcode_state in ("running", "prepare"):
-            self.printer.status = PrinterStatus.PRINTING
-        elif gcode_state == "paused":
-            self.printer.status = PrinterStatus.PAUSED
-        elif gcode_state == "finish":
-            self.printer.status = PrinterStatus.FINISHING
-        elif gcode_state == "failed":
-            self.printer.status = PrinterStatus.ERROR
-            self.printer.error_message = print_data.get("fail_reason", "Unknown error")
-        else:
-            self.printer.status = PrinterStatus.IDLE
+    @staticmethod
+    def _safe_float(val) -> float:
+        try:
+            return round(float(val), 1)
+        except (TypeError, ValueError):
+            return 0.0
 
-        self.printer.nozzle_temp = round(print_data.get("nozzle_temper", 0), 1)
-        self.printer.target_nozzle_temp = round(print_data.get("nozzle_target_temper", 0), 1)
-        self.printer.bed_temp = round(print_data.get("bed_temper", 0), 1)
-        self.printer.target_bed_temp = round(print_data.get("bed_target_temper", 0), 1)
-        self.printer.chamber_temp = round(print_data.get("chamber_temper", 0), 1)
+    @staticmethod
+    def _safe_int(val) -> int:
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return 0
 
-        self._parse_ams(data)
+    @staticmethod
+    def _safe_str(val) -> str:
+        try:
+            return str(val) if val else ""
+        except (TypeError, ValueError):
+            return ""
 
-    def _parse_ams(self, data: dict):
-        ams_data = data.get("ams", {})
-        ams_list = ams_data.get("ams", [])
-        if not ams_list:
-            return
-
-        self.printer.ams_units = []
-        for ams_unit in ams_list:
-            trays = ams_unit.get("tray", [])
-            for tray in trays:
-                self.printer.ams_units.append(AMSStatus(
-                    tray_id=tray.get("id", 0),
-                    color="#" + tray.get("tray_color", "CCCCCC"),
-                    material=tray.get("tray_type", "Unknown"),
-                    temperature=tray.get("tray_drying_temp", 0),
-                    remaining=tray.get("remain", 0),
-                ))
-
-    def send_command(self, command: dict):
-        if not self._connected:
-            logger.warning(f"Cannot send command to {self.printer.name}: not connected")
-            return
-        topic = f"device/{self.printer.serial_number}/request"
-        self.client.publish(topic, json.dumps(command))
+    @staticmethod
+    def _safe_time(val) -> int:
+        if val is None:
+            return 0
+        if isinstance(val, str) and val.lower() == "unknown":
+            return 0
+        try:
+            return int(val) * 60
+        except (TypeError, ValueError):
+            return 0
 
     def pause_print(self):
-        self.send_command({
-            "print": {
-                "command": "pause",
-                "sequence_id": str(int(time.time() * 1000))
-            }
-        })
+        try:
+            self._api.pause_print()
+        except Exception as e:
+            logger.error(f"Pause failed for {self.printer.name}: {e}")
 
     def resume_print(self):
-        self.send_command({
-            "print": {
-                "command": "resume",
-                "sequence_id": str(int(time.time() * 1000))
-            }
-        })
+        try:
+            self._api.resume_print()
+        except Exception as e:
+            logger.error(f"Resume failed for {self.printer.name}: {e}")
 
     def stop_print(self):
-        self.send_command({
-            "print": {
-                "command": "stop",
-                "sequence_id": str(int(time.time() * 1000))
-            }
-        })
+        try:
+            self._api.stop_print()
+        except Exception as e:
+            logger.error(f"Stop failed for {self.printer.name}: {e}")
 
     def set_led(self, mode: str = "on"):
-        self.send_command({
-            "system": {
-                "sequence_id": str(int(time.time() * 1000)),
-                "command": "ledctrl",
-                "led_node": "chamber_light",
-                "led_mode": mode,
-            }
-        })
+        try:
+            if mode == "on":
+                self._api.turn_light_on()
+            else:
+                self._api.turn_light_off()
+        except Exception as e:
+            logger.error(f"LED control failed for {self.printer.name}: {e}")
 
     def set_nozzle_temp(self, temp: float):
-        self.send_command({
-            "print": {
-                "command": "gcode_line",
-                "param": f"M104 S{temp}",
-                "sequence_id": str(int(time.time() * 1000))
-            }
-        })
+        try:
+            self._api.set_nozzle_temperature(int(temp))
+        except Exception as e:
+            logger.error(f"Set nozzle temp failed for {self.printer.name}: {e}")
 
     def set_bed_temp(self, temp: float):
-        self.send_command({
-            "print": {
-                "command": "gcode_line",
-                "param": f"M140 S{temp}",
-                "sequence_id": str(int(time.time() * 1000))
-            }
-        })
+        try:
+            self._api.set_bed_temperature(int(temp))
+        except Exception as e:
+            logger.error(f"Set bed temp failed for {self.printer.name}: {e}")
+
+    def send_gcode(self, gcode: str):
+        try:
+            self._api.mqtt_client.send_gcode(gcode)
+        except Exception as e:
+            logger.error(f"G-code send failed for {self.printer.name}: {e}")
+
+    def home_axes(self):
+        try:
+            self._api.home_printer()
+        except Exception as e:
+            logger.error(f"Home failed for {self.printer.name}: {e}")
+
+    def move_axis(self, axis: str, distance: float, speed: int = 3000):
+        if axis.upper() == "Z":
+            try:
+                self._api.move_z_axis(distance)
+            except Exception as e:
+                logger.error(f"Move Z failed for {self.printer.name}: {e}")
+        else:
+            self.send_gcode(f"G91\nG1 {axis}{distance} F{speed}\nG90")
+
+    def set_fan_speed(self, speed: int):
+        try:
+            self._api.set_part_fan_speed(int(speed))
+        except Exception as e:
+            logger.error(f"Set fan speed failed for {self.printer.name}: {e}")
+
+    def set_print_speed(self, level: int):
+        try:
+            self._api.set_print_speed(int(level))
+        except Exception as e:
+            logger.error(f"Set print speed failed for {self.printer.name}: {e}")
+
+    def get_ams_data(self) -> list[dict]:
+        try:
+            hub = self._api.ams_hub()
+            if hub is None or not hub.ams_hub:
+                return []
+            result = []
+            for ams_id, ams in hub.ams_hub.items():
+                trays = []
+                for tray_idx, tray in ams.filament_trays.items():
+                    color = tray.tray_color or ""
+                    if color and not color.startswith("#"):
+                        color = "#" + color
+                    trays.append({
+                        "tray_id": tray_idx,
+                        "color": color,
+                        "material": tray.tray_type or "Unknown",
+                        "nozzle_temp_min": tray.nozzle_temp_min,
+                        "nozzle_temp_max": tray.nozzle_temp_max,
+                        "tray_id_name": tray.tray_id_name,
+                    })
+                result.append({
+                    "ams_id": ams_id,
+                    "humidity": ams.humidity,
+                    "temperature": ams.temperature,
+                    "trays": trays,
+                })
+            return result
+        except Exception as e:
+            logger.debug(f"AMS data error: {e}")
+            return []
+
+    def start_print_file(self, filename: str):
+        try:
+            self._api.start_print(filename)
+        except Exception as e:
+            logger.error(f"Start print failed for {self.printer.name}: {e}")
+
+    def get_camera_url(self) -> str:
+        return f"rtsp://{self.printer.ip_address}:322/streaming/live/1"
+
+    def upload_file(self, local_path: str, remote_name: str = None,
+                    progress_callback: Callable = None) -> bool:
+        try:
+            self._api.upload_file(local_path, remote_name)
+            if progress_callback:
+                progress_callback(100)
+            logger.info(f"Uploaded {local_path} to {self.printer.name}")
+            return True
+        except Exception as e:
+            logger.error(f"Upload failed for {self.printer.name}: {e}")
+            return False
+
+    def list_files(self) -> list[str]:
+        try:
+            ftp = self._api.ftp_client
+            if ftp:
+                files = ftp.list_directory()
+                return [
+                    f for f in files
+                    if f.endswith((".3mf", ".gcode", ".gcode.3mf"))
+                ]
+            return []
+        except Exception as e:
+            logger.error(f"List files failed for {self.printer.name}: {e}")
+            return []
+
+    def delete_file(self, filename: str) -> bool:
+        try:
+            self._api.delete_file(filename)
+            logger.info(f"Deleted {filename} from {self.printer.name}")
+            return True
+        except Exception as e:
+            logger.error(f"Delete failed for {self.printer.name}: {e}")
+            return False
 
     @property
     def is_connected(self) -> bool:

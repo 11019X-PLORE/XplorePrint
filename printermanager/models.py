@@ -23,6 +23,7 @@ class PrinterModel(Enum):
     X1C = "X1 Carbon"
     X1 = "X1"
     P1S = "P1S"
+    P1S_COMBO = "P1S Combo"
     P1P = "P1P"
     A1 = "A1"
     A1_MINI = "A1 Mini"
