@@ -1,4 +1,4 @@
-﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * XplorePrint - Main Application JavaScript
  * FRC Team 11019 Xplore
  * 3D Printer Management Software
@@ -1819,6 +1819,36 @@ class PrinterApp {
         this.showToast('设置已保存', 'success');
     }
 
+    async viewLogs() {
+        const viewer = document.getElementById('logViewer');
+        const content = document.getElementById('logViewerContent');
+        const stats = document.getElementById('logViewerStats');
+        viewer.style.display = 'block';
+        content.textContent = '加载中...';
+        try {
+            const res = await fetch('/api/logs/view?lines=200');
+            const data = await res.json();
+            if (data.success) {
+                stats.textContent = `共 ${data.total_lines} 行 · ${data.file_size_kb} KB · 显示最近 ${data.lines.length} 行`;
+                content.textContent = data.lines.join('\n');
+            } else {
+                content.textContent = '加载失败: ' + (data.message || '未知错误');
+            }
+        } catch (e) {
+            content.textContent = '加载失败: 网络错误';
+        }
+    }
+
+    downloadLogs() {
+        const a = document.createElement('a');
+        a.href = '/api/logs/download';
+        a.download = 'xploreprint.log';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        this.showToast('日志文件下载中...', 'success');
+    }
+
     updateFilamentMinTempSetting() {
         const slider = document.getElementById('settingFilamentMinTemp');
         const input = document.getElementById('settingFilamentMinTempInput');
@@ -2554,19 +2584,31 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
 
     renderFileManager() {
         this._selectedFile = null;
-        const onlinePrinters = this.printers.filter(p => p.status !== 'offline');
+        this._fileTab = this._fileTab || 'storage';
+        const allPrinters = this.printers;
         const select = document.getElementById('fmPrinterSelect');
         if (select) {
-            select.innerHTML = '<option value="">选择目标打印机...</option>' +
-                onlinePrinters.map(p => `<option value="${p.id}">${this.escapeHtml(p.name)} (${p.model})</option>`).join('');
+            select.innerHTML = '<option value="">选择打印机...</option>' +
+                allPrinters.map(p => `<option value="${p.id}">${this.escapeHtml(p.name)} (${p.model})</option>`).join('');
             select.onchange = () => {
                 this._selectedFmPrinter = select.value;
-                document.getElementById('uploadBtn').disabled = !select.value || !this._selectedFile;
-                if (select.value) {
+                this._updateFmPrinterStatus(select.value);
+                document.getElementById('uploadBtn').disabled = !this._selectedFile;
+                document.getElementById('uploadDirectBtn').disabled = !select.value || !this._selectedFile;
+                if (select.value && this._fileTab === 'printer') {
                     this.loadPrinterFiles(select.value);
                 }
+                if (this._fileTab === 'storage') {
+                    this.loadStorageFiles();
+                }
             };
+            if (select.value) {
+                this._updateFmPrinterStatus(select.value);
+            }
         }
+
+        this.switchFileTab(this._fileTab);
+        this.loadStorageFiles();
 
         const uploadZone = document.getElementById('uploadZone');
         const fileInput = document.getElementById('fileInput');
@@ -2587,14 +2629,22 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
                 }
             };
         }
+    }
 
-        document.getElementById('fmFileList').innerHTML = `
-            <div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                <p>请选择打印机并刷新</p>
-                <span>选择打印机后点击刷新查看文件列表</span>
-            </div>
-        `;
+    _updateFmPrinterStatus(printerId) {
+        const statusEl = document.getElementById('fmPrinterStatus');
+        if (!statusEl) return;
+        if (!printerId) {
+            statusEl.textContent = '';
+            statusEl.className = 'fm-printer-status';
+            return;
+        }
+        const printer = this.printers.find(p => p.id === printerId);
+        if (printer) {
+            const isOnline = printer.status !== 'offline';
+            statusEl.textContent = isOnline ? '在线' : '离线';
+            statusEl.className = 'fm-printer-status ' + (isOnline ? 'online' : 'offline');
+        }
     }
 
     handleFileSelect(file) {
@@ -2609,7 +2659,8 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
             return;
         }
         this._selectedFile = file;
-        document.getElementById('uploadBtn').disabled = !document.getElementById('fmPrinterSelect').value;
+        document.getElementById('uploadBtn').disabled = !this._selectedFile;
+        document.getElementById('uploadDirectBtn').disabled = !document.getElementById('fmPrinterSelect').value || !this._selectedFile;
         const zone = document.getElementById('uploadZone');
         zone.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;margin-bottom:12px;color:var(--green);">
@@ -2620,41 +2671,250 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
         `;
     }
 
-    async uploadFile() {
+    _showUploadProgress() {
+        const el = document.getElementById('uploadProgress');
+        el.style.display = 'block';
+        document.getElementById('uploadProgressFill').style.width = '0%';
+        document.getElementById('uploadProgressPercent').textContent = '0%';
+        document.getElementById('uploadProgressLabel').textContent = '准备上传...';
+        document.getElementById('uploadProgressSize').textContent = '0 / 0 MB';
+        document.getElementById('uploadProgressSpeed').textContent = '';
+    }
+
+    _updateUploadProgress(loaded, total, label) {
+        const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
+        document.getElementById('uploadProgressFill').style.width = percent + '%';
+        document.getElementById('uploadProgressPercent').textContent = percent + '%';
+        document.getElementById('uploadProgressLabel').textContent = label;
+        const loadedMB = (loaded / 1024 / 1024).toFixed(1);
+        if (total > 0) {
+            const totalMB = (total / 1024 / 1024).toFixed(1);
+            document.getElementById('uploadProgressSize').textContent = `${loadedMB} / ${totalMB} MB`;
+        } else {
+            document.getElementById('uploadProgressSize').textContent = `${loadedMB} MB`;
+        }
+        if (this._uploadStartTime && loaded > 0) {
+            const elapsed = (Date.now() - this._uploadStartTime) / 1000;
+            const speed = loaded / elapsed;
+            const speedStr = speed > 1024 * 1024
+                ? `${(speed / 1024 / 1024).toFixed(1)} MB/s`
+                : `${(speed / 1024).toFixed(0)} KB/s`;
+            document.getElementById('uploadProgressSpeed').textContent = speedStr;
+        }
+    }
+
+    _finishUploadProgress(success, message) {
+        document.getElementById('uploadProgressFill').style.width = success ? '100%' : '0%';
+        document.getElementById('uploadProgressPercent').textContent = success ? '100%' : '失败';
+        document.getElementById('uploadProgressLabel').textContent = message;
+        document.getElementById('uploadProgressSpeed').textContent = '';
+        setTimeout(() => {
+            document.getElementById('uploadProgress').style.display = 'none';
+        }, 3000);
+    }
+
+    _xhrUpload(url, formData, onSuccess) {
+        this._uploadStartTime = Date.now();
+        this._showUploadProgress();
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                this._updateUploadProgress(e.loaded, e.total, '上传中...');
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                if (result.success) {
+                    this._updateUploadProgress(this._selectedFile.size, this._selectedFile.size, '上传完成');
+                    this._finishUploadProgress(true, '上传成功');
+                    this.showToast(result.message || '上传成功', 'success');
+                    if (onSuccess) onSuccess(result);
+                } else {
+                    this._finishUploadProgress(false, '上传失败: ' + (result.message || '未知错误'));
+                    this.showToast('上传失败: ' + (result.message || '未知错误'), 'error');
+                }
+            } catch (e) {
+                this._finishUploadProgress(false, '响应解析失败');
+                this.showToast('响应解析失败', 'error');
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            this._finishUploadProgress(false, '网络错误');
+            this.showToast('上传失败: 网络错误', 'error');
+        });
+
+        xhr.addEventListener('abort', () => {
+            this._finishUploadProgress(false, '已取消');
+        });
+
+        xhr.send(formData);
+        return xhr;
+    }
+
+    uploadFile() {
         const printerId = document.getElementById('fmPrinterSelect').value;
         if (!printerId || !this._selectedFile) return;
 
         const formData = new FormData();
         formData.append('file', this._selectedFile);
 
-        const progressEl = document.getElementById('uploadProgress');
-        const progressFill = document.getElementById('uploadProgressFill');
-        const progressText = document.getElementById('uploadProgressText');
         document.getElementById('uploadBtn').disabled = true;
-        progressEl.style.display = 'block';
-        progressFill.style.width = '0%';
-        progressText.textContent = '上传中...';
+        document.getElementById('uploadDirectBtn').disabled = true;
 
+        this._xhrUpload(`/api/printers/${printerId}/upload`, formData, () => {
+            this.loadPrinterFiles(printerId);
+        });
+    }
+
+    uploadToStorage() {
+        if (!this._selectedFile) return;
+
+        const formData = new FormData();
+        formData.append('file', this._selectedFile);
+
+        document.getElementById('uploadBtn').disabled = true;
+        document.getElementById('uploadDirectBtn').disabled = true;
+
+        this._xhrUpload('/api/storage/upload', formData, () => {
+            this.loadStorageFiles();
+            this._selectedFile = null;
+            const zone = document.getElementById('uploadZone');
+            zone.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;margin-bottom:12px;opacity:0.5;">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <p>拖拽文件到此处或点击上传</p>
+                <span>最大 200MB</span>
+            `;
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('uploadDirectBtn').disabled = true;
+        });
+    }
+
+    switchFileTab(tab) {
+        this._fileTab = tab;
+        document.querySelectorAll('.fm-tab-btn').forEach(b => b.classList.remove('active'));
+        const activeBtn = document.querySelector(`.fm-tab-btn[data-tab="${tab}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+        document.getElementById('storageTab').style.display = tab === 'storage' ? 'block' : 'none';
+        document.getElementById('printerTab').style.display = tab === 'printer' ? 'block' : 'none';
+        if (tab === 'printer') {
+            const printerId = document.getElementById('fmPrinterSelect').value;
+            if (printerId) {
+                this.loadPrinterFiles(printerId);
+            }
+        }
+    }
+
+    async loadStorageFiles() {
         try {
-            const res = await fetch(`/api/printers/${printerId}/upload`, {
+            const res = await fetch('/api/storage/files');
+            const files = await res.json();
+            this.renderStorageFiles(files);
+        } catch (e) {
+            document.getElementById('storageFileList').innerHTML = `
+                <div class="empty-state"><p>加载失败</p><span>${e.message}</span></div>
+            `;
+        }
+    }
+
+    renderStorageFiles(files) {
+        const container = document.getElementById('storageFileList');
+        if (!files || files.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                    <p>暂无模型文件</p>
+                    <span>上传 .gcode / .3mf 文件到服务器</span>
+                </div>
+            `;
+            return;
+        }
+        container.innerHTML = files.map((f, i) => {
+            const ext = f.ext.replace('.', '').toUpperCase();
+            const icon = ext === 'GCODE' ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>` :
+                `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+            const modified = new Date(f.modified * 1000).toLocaleString();
+            return `
+                <div class="fm-file-item">
+                    <div class="fm-file-icon">${icon}</div>
+                    <div class="fm-file-info">
+                        <div class="fm-file-name" title="${this.escapeHtml(f.name)}">${this.escapeHtml(f.name)}</div>
+                        <div class="fm-file-ext">${ext} · ${f.size_mb} MB · ${modified}</div>
+                    </div>
+                    <div class="fm-file-actions">
+                        <button class="btn btn-sm btn-primary" onclick="manager.sendToPrinter('${this.escapeJs(f.name)}')" title="发送到打印机">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 5 19 12"/></svg>
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="manager.startPrintFromStorage('${this.escapeJs(f.name)}')" title="发送并打印">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="manager.deleteStorageFile('${this.escapeJs(f.name)}')" title="删除">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async sendToPrinter(filename) {
+        const printerId = document.getElementById('fmPrinterSelect').value;
+        if (!printerId) {
+            this.showToast('请先选择目标打印机', 'error');
+            return;
+        }
+        try {
+            const res = await fetch('/api/storage/send-to-printer', {
                 method: 'POST',
-                body: formData,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename, printer_id: printerId }),
             });
             const result = await res.json();
             if (result.success) {
-                progressFill.style.width = '100%';
-                progressText.textContent = '上传成功';
-                this.showToast(`文件已上传到打印机`, 'success');
-                this.loadPrinterFiles(printerId);
+                this.showToast(`已发送 ${filename} 到打印机`, 'success');
             } else {
-                progressText.textContent = '上传失败: ' + (result.message || '未知错误');
-                this.showToast('上传失败: ' + (result.message || '未知错误'), 'error');
+                this.showToast('发送失败: ' + (result.message || '未知错误'), 'error');
             }
         } catch (e) {
-            progressText.textContent = '上传失败: 网络错误';
-            this.showToast('上传失败: 网络错误', 'error');
+            this.showToast('发送失败: 网络错误', 'error');
         }
-        setTimeout(() => { progressEl.style.display = 'none'; }, 2000);
+    }
+
+    async startPrintFromStorage(filename) {
+        const printerId = document.getElementById('fmPrinterSelect').value;
+        if (!printerId) {
+            this.showToast('请先选择目标打印机', 'error');
+            return;
+        }
+        this._amsPrintPrinterId = printerId;
+        this._amsPrintFilename = filename;
+        this._amsPrintFromStorage = true;
+        this.showAmsMappingModal(printerId, filename);
+    }
+
+    async deleteStorageFile(filename) {
+        if (!confirm(`确定要删除服务器文件 "${filename}" 吗？`)) return;
+        try {
+            const res = await fetch(`/api/storage/files/${encodeURIComponent(filename)}`, {
+                method: 'DELETE',
+            });
+            const result = await res.json();
+            if (result.success) {
+                this.showToast('已删除服务器文件', 'success');
+                this.loadStorageFiles();
+            } else {
+                this.showToast('删除失败: ' + (result.message || '未知错误'), 'error');
+            }
+        } catch (e) {
+            this.showToast('删除失败: 网络错误', 'error');
+        }
     }
 
     async loadPrinterFiles(printerId) {
@@ -2708,6 +2968,7 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
     async startPrint(printerId, filename) {
         this._amsPrintPrinterId = printerId;
         this._amsPrintFilename = filename;
+        this._amsPrintFromStorage = false;
         this.showAmsMappingModal(printerId, filename);
     }
 
@@ -2749,6 +3010,7 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
     async confirmStartPrint() {
         const printerId = this._amsPrintPrinterId;
         const filename = this._amsPrintFilename;
+        const fromStorage = this._amsPrintFromStorage;
         if (!printerId || !filename) return;
 
         const plateNumber = parseInt(document.getElementById('amsPlateNumber').value) || 1;
@@ -2763,11 +3025,15 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
         });
 
         try {
-            const res = await fetch(`/api/printers/${printerId}/print`, {
+            const url = fromStorage
+                ? '/api/storage/print'
+                : `/api/printers/${printerId}/print`;
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     filename,
+                    printer_id: fromStorage ? printerId : undefined,
                     plate_number: plateNumber,
                     use_ams: useAms,
                     ams_mapping: amsMapping.length > 0 ? amsMapping : null,
@@ -2805,9 +3071,13 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
     }
 
     refreshFiles() {
-        const printerId = document.getElementById('fmPrinterSelect').value;
-        if (printerId) {
-            this.loadPrinterFiles(printerId);
+        if (this._fileTab === 'printer') {
+            const printerId = document.getElementById('fmPrinterSelect').value;
+            if (printerId) {
+                this.loadPrinterFiles(printerId);
+            }
+        } else {
+            this.loadStorageFiles();
         }
     }
 }

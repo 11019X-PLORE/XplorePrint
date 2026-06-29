@@ -5,21 +5,83 @@ FRC Team 11019 Xplore
 """
 
 import logging
+import logging.handlers
 import os
-from flask import Flask, render_template, request, jsonify, Response
+import sys
+from flask import Flask, render_template, request, jsonify, Response, send_file
 from flask_socketio import SocketIO
 
 from printermanager.printermanager import PrinterManager
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+# ==================== 彩色日志配置 ====================
+
+LOG_DIR = os.path.join(os.path.dirname(__file__), "data", "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+LOG_COLORS = {
+    "DEBUG": "\033[90m",
+    "INFO": "\033[92m",
+    "WARNING": "\033[93m",
+    "ERROR": "\033[91m",
+    "CRITICAL": "\033[41m\033[97m",
+}
+RESET = "\033[0m"
+TIMESTAMP_COLOR = "\033[96m"
+NAME_COLOR = "\033[94m"
+MSG_COLOR = "\033[37m"
+
+
+class ColoredFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        level_color = LOG_COLORS.get(record.levelname, "")
+        record.colored_levelname = f"{level_color}{record.levelname:<8}{RESET}"
+        record.colored_timestamp = f"{TIMESTAMP_COLOR}{self.formatTime(record, self.datefmt)}{RESET}"
+        record.colored_name = f"{NAME_COLOR}{record.name}{RESET}"
+        record.colored_msg = f"{MSG_COLOR}{record.getMessage()}{RESET}"
+        if record.exc_info and record.exc_info[0]:
+            record.colored_exc = f"\033[91m{self.formatException(record.exc_info)}{RESET}"
+        else:
+            record.colored_exc = ""
+        return f"{record.colored_timestamp} [{record.colored_levelname}] {record.colored_name}: {record.colored_msg}"
+
+
+# 控制台 handler（彩色）
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.DEBUG)
+console_handler.setFormatter(ColoredFormatter(
+    "%(colored_timestamp)s [%(colored_levelname)s] %(colored_name)s: %(colored_msg)s"
+))
+
+# 文件 handler（无颜色，带轮转）
+file_handler = logging.handlers.RotatingFileHandler(
+    os.path.join(LOG_DIR, "xploreprint.log"),
+    maxBytes=5 * 1024 * 1024,
+    backupCount=5,
+    encoding="utf-8",
 )
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)-8s] %(name)s: %(message)s"
+))
+
+# 应用根 logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+root_logger.handlers.clear()
+root_logger.addHandler(console_handler)
+root_logger.addHandler(file_handler)
+
 logger = logging.getLogger(__name__)
+
+# 抑制第三方库的冗余 DEBUG 日志
+logging.getLogger("bambulabs_api").setLevel(logging.WARNING)
 
 app = Flask(__name__, template_folder="web/templates", static_folder="web/static")
 app.config["SECRET_KEY"] = "xploreprint-11019-secret"
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+
+STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data", "storage")
+os.makedirs(STORAGE_DIR, exist_ok=True)
 
 manager = PrinterManager()
 
@@ -116,6 +178,124 @@ def list_printer_files(printer_id):
 @app.route("/api/printers/<printer_id>/files/<filename>", methods=["DELETE"])
 def delete_printer_file(printer_id, filename):
     return jsonify(manager.delete_printer_file(printer_id, filename))
+
+
+# ==================== 服务器模型文件存储 API ====================
+
+@app.route("/api/storage/files", methods=["GET"])
+def list_storage_files():
+    import time as _time
+    import os as _os
+    files = []
+    for fname in _os.listdir(STORAGE_DIR):
+        fpath = _os.path.join(STORAGE_DIR, fname)
+        if _os.path.isfile(fpath):
+            stat = _os.stat(fpath)
+            ext = _os.path.splitext(fname)[1].lower()
+            files.append({
+                "name": fname,
+                "size": stat.st_size,
+                "size_mb": round(stat.st_size / 1024 / 1024, 2),
+                "modified": stat.st_mtime,
+                "ext": ext,
+            })
+    files.sort(key=lambda x: x["modified"], reverse=True)
+    return jsonify(files)
+
+
+@app.route("/api/storage/upload", methods=["POST"])
+def upload_to_storage():
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "未选择文件"}), 400
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"success": False, "message": "文件名为空"}), 400
+    import os as _os
+    safe_name = _os.path.basename(file.filename)
+    save_path = _os.path.join(STORAGE_DIR, safe_name)
+    file.save(save_path)
+    logger.info(f"Saved to storage: {safe_name} ({_os.path.getsize(save_path)} bytes)")
+    return jsonify({"success": True, "filename": safe_name, "message": "文件已保存到服务器"})
+
+
+@app.route("/api/storage/files/<filename>", methods=["DELETE"])
+def delete_storage_file(filename):
+    import os as _os
+    fpath = _os.path.join(STORAGE_DIR, _os.path.basename(filename))
+    if _os.path.exists(fpath):
+        _os.remove(fpath)
+        return jsonify({"success": True, "message": "已删除"})
+    return jsonify({"success": False, "message": "文件不存在"}), 404
+
+
+@app.route("/api/storage/send-to-printer", methods=["POST"])
+def send_to_printer():
+    data = request.json
+    filename = data.get("filename", "")
+    printer_id = data.get("printer_id", "")
+    if not filename or not printer_id:
+        return jsonify({"success": False, "message": "缺少参数"}), 400
+    import os as _os
+    fpath = _os.path.join(STORAGE_DIR, _os.path.basename(filename))
+    if not _os.path.exists(fpath):
+        return jsonify({"success": False, "message": "服务器文件不存在"}), 404
+    result = manager.upload_to_printer(printer_id, fpath, filename)
+    return jsonify(result)
+
+
+@app.route("/api/storage/print", methods=["POST"])
+def start_print_from_storage():
+    data = request.json
+    filename = data.get("filename", "")
+    printer_id = data.get("printer_id", "")
+    if not filename or not printer_id:
+        return jsonify({"success": False, "message": "缺少参数"}), 400
+    import os as _os
+    fpath = _os.path.join(STORAGE_DIR, _os.path.basename(filename))
+    if not _os.path.exists(fpath):
+        return jsonify({"success": False, "message": "服务器文件不存在"}), 404
+    upload_result = manager.upload_to_printer(printer_id, fpath, filename)
+    if not upload_result.get("success"):
+        return jsonify({"success": False, "message": "上传到打印机失败: " + upload_result.get("message", "未知错误")})
+    return jsonify(manager.start_print(
+        printer_id,
+        filename,
+        plate_number=data.get("plate_number", 1),
+        use_ams=data.get("use_ams", True),
+        ams_mapping=data.get("ams_mapping"),
+        flow_calibration=data.get("flow_calibration", True),
+    ))
+
+
+# ==================== 日志导出 API ====================
+
+@app.route("/api/logs/download", methods=["GET"])
+def download_logs():
+    log_path = os.path.join(LOG_DIR, "xploreprint.log")
+    if not os.path.exists(log_path):
+        return jsonify({"success": False, "message": "日志文件不存在"}), 404
+    return send_file(log_path, as_attachment=True, download_name="xploreprint.log", mimetype="text/plain")
+
+
+@app.route("/api/logs/view", methods=["GET"])
+def view_logs():
+    lines = request.args.get("lines", 200, type=int)
+    log_path = os.path.join(LOG_DIR, "xploreprint.log")
+    if not os.path.exists(log_path):
+        return jsonify({"success": False, "message": "日志文件不存在"}), 404
+    import os as _os
+    file_size = _os.path.getsize(log_path)
+    with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+        content = f.read()
+    all_lines = content.strip().split("\n")
+    recent = all_lines[-lines:] if len(all_lines) > lines else all_lines
+    return jsonify({
+        "success": True,
+        "total_lines": len(all_lines),
+        "lines": recent,
+        "file_size": file_size,
+        "file_size_kb": round(file_size / 1024, 1),
+    })
 
 
 @app.route("/api/printers/<printer_id>/upload", methods=["POST"])
@@ -609,4 +789,6 @@ def handle_connect():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     logger.info(f"XplorePrint starting on port {port}")
+    logger.debug("Debug logging enabled - verbose output active")
+    logger.info(f"Log file: {os.path.join(LOG_DIR, 'xploreprint.log')}")
     socketio.run(app, host="0.0.0.0", port=port, debug=True)

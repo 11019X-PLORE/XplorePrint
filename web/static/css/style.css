@@ -1077,6 +1077,44 @@ select.form-input {
     color: var(--text-muted);
 }
 
+/* Log Viewer */
+.log-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.log-viewer {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.log-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    font-size: 12px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.log-viewer-content {
+    margin: 0;
+    padding: 12px;
+    font-size: 11px;
+    font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 /* Schedule Panel */
 .schedule-panel {
     background: var(--bg-secondary);
@@ -3244,6 +3282,46 @@ select.form-input {
     max-width: 1200px;
 }
 
+.fm-printer-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.fm-printer-bar-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.fm-printer-select {
+    width: 280px;
+    padding: 10px 14px;
+    font-size: 14px;
+}
+
+.fm-printer-status {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.fm-printer-status.online {
+    color: var(--green);
+}
+
+.fm-printer-status.offline {
+    color: var(--red);
+}
+
 .fm-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -3307,20 +3385,42 @@ select.form-input {
     margin-top: 14px;
 }
 
-.fm-upload-actions select {
-    flex: 1;
-}
-
 .upload-progress {
     margin-top: 14px;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
 }
 
-.upload-progress span {
-    display: block;
-    font-size: 12px;
+.upload-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.upload-progress-header span:first-child {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.upload-progress-header span:last-child {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.upload-progress .progress-bar {
+    height: 6px;
+    margin-bottom: 8px;
+}
+
+.upload-progress-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
     color: var(--text-muted);
-    margin-top: 6px;
-    text-align: center;
 }
 
 .fm-file-list {
@@ -3346,8 +3446,18 @@ select.form-input {
 }
 
 .fm-file-icon {
-    font-size: 24px;
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+}
+
+.fm-file-icon svg {
+    width: 22px;
+    height: 22px;
 }
 
 .fm-file-info {
@@ -3380,4 +3490,42 @@ select.form-input {
     .file-manager-container {
         grid-template-columns: 1fr;
     }
+}
+
+.fm-tabs {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--bg-tertiary);
+    padding: 0;
+    margin-bottom: 12px;
+    gap: 4px;
+}
+
+.fm-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s ease;
+}
+
+.fm-tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.fm-tab-btn.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+    background: transparent;
+}
+
+.fm-tab-content {
+    min-height: 400px;
 }

@@ -439,17 +439,25 @@ class BambuClient:
                          ams_mapping: list[int] = None,
                          flow_calibration: bool = True) -> bool:
         try:
+            if ams_mapping is None or len(ams_mapping) == 0:
+                ams_mapping = [0]
+            logger.info(
+                f"start_print_file: {filename} plate={plate_number} "
+                f"use_ams={use_ams} mapping={ams_mapping} "
+                f"flow_cali={flow_calibration}"
+            )
+            if filename.lower().endswith(".gcode") and not filename.lower().endswith(".3mf"):
+                plate_number = filename
             result = self._api.start_print(
                 filename,
                 plate_number,
                 use_ams=use_ams,
-                ams_mapping=ams_mapping or [0],
+                ams_mapping=ams_mapping,
                 flow_calibration=flow_calibration,
             )
             logger.info(
-                f"Start print {filename} on {self.printer.name} "
-                f"plate={plate_number} use_ams={use_ams} "
-                f"mapping={ams_mapping or [0]} result={result}"
+                f"Start print result: {result} "
+                f"file={filename} plate={plate_number}"
             )
             return bool(result)
         except Exception as e:
@@ -465,8 +473,8 @@ class BambuClient:
             from pathlib import Path
             remote_name = remote_name or Path(local_path).name
             ftp = self._api.ftp_client
-            if hasattr(ftp, 'ftps') and hasattr(ftp.ftps, 'timeout'):
-                ftp.ftps.timeout = 120
+            if hasattr(ftp, 'ftps'):
+                ftp.ftps.timeout = 300
             with open(local_path, "rb") as f:
                 self._api.upload_file(f, remote_name)
             if progress_callback:
