@@ -82,6 +82,7 @@ class AMSStatus:
     color: str = "#CCCCCC"
     material: str = "Unknown"
     temperature: float = 0.0
+    humidity: float = 0.0
     remaining: float = 0.0
 
 

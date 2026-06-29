@@ -409,6 +409,7 @@ class PrinterManager:
                     "color": a.color,
                     "material": a.material,
                     "temperature": a.temperature,
+                    "humidity": a.humidity,
                     "remaining": a.remaining,
                 }
                 for a in printer.ams_units
@@ -455,6 +456,13 @@ class PrinterManager:
             client.set_chamber_fan_speed(kwargs.get("speed", 128))
         elif command == "send_gcode":
             client.send_gcode(kwargs.get("gcode", ""))
+        elif command == "load_filament":
+            client.load_filament(
+                ams_id=kwargs.get("ams_id"),
+                tray_id=kwargs.get("tray_id"),
+            )
+        elif command == "unload_filament":
+            client.unload_filament()
 
     def get_ams_data(self, printer_id: str) -> list[dict]:
         client = self._clients.get(printer_id)

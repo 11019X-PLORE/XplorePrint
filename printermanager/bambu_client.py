@@ -185,8 +185,18 @@ class BambuClient:
                 return
             ams_units = []
             raw_data = []
+
+            raw_dump = {}
+            try:
+                raw_dump = self._api.mqtt_client.dump()
+            except Exception:
+                pass
+            raw_ams = raw_dump.get("print", {}).get("ams", {}).get("ams", [])
+
             for ams_id, ams in hub.ams_hub.items():
                 trays = []
+                raw_ams_unit = raw_ams[ams_id] if ams_id < len(raw_ams) else {}
+                raw_trays = raw_ams_unit.get("tray", [])
                 for tray_idx, tray in ams.filament_trays.items():
                     color = tray.tray_color
                     if color and not color.startswith("#"):
@@ -195,12 +205,23 @@ class BambuClient:
                         color = "#CCCCCC"
                     material = tray.tray_type or "Unknown"
                     material_clean = material.split("_")[-1] if "_" in material else material
+
+                    raw_tray = raw_trays[tray_idx] if tray_idx < len(raw_trays) else {}
+                    remaining = 100
+                    try:
+                        remain_val = raw_tray.get("remain", None)
+                        if remain_val is not None:
+                            remaining = int(remain_val)
+                    except (ValueError, TypeError):
+                        pass
+
                     ams_units.append(AMSStatus(
                         tray_id=int(f"{ams_id}{tray_idx}"),
                         color=color,
                         material=material_clean,
                         temperature=ams.temperature,
-                        remaining=100,
+                        humidity=ams.humidity,
+                        remaining=remaining,
                     ))
                     trays.append({
                         "tray_id": tray_idx,
@@ -209,6 +230,7 @@ class BambuClient:
                         "nozzle_temp_min": tray.nozzle_temp_min,
                         "nozzle_temp_max": tray.nozzle_temp_max,
                         "tray_id_name": tray.tray_id_name,
+                        "remaining": remaining,
                     })
                 raw_data.append({
                     "ams_id": ams_id,
@@ -270,6 +292,31 @@ class BambuClient:
             self._api.stop_print()
         except Exception as e:
             logger.error(f"Stop failed for {self.printer.name}: {e}")
+
+    def load_filament(self, ams_id: int = None, tray_id: int = None):
+        try:
+            if ams_id is not None and tray_id is not None:
+                payload = {
+                    "print": {
+                        "command": "ams_change_filament",
+                        "target": 255,
+                        "curr_temp": 215,
+                        "tar_temp": 215,
+                        "ams_id": ams_id,
+                        "tray_id": tray_id,
+                    }
+                }
+                self._api.mqtt_client._PrinterMQTTClient__publish_command(payload)
+            else:
+                self._api.load_filament_spool()
+        except Exception as e:
+            logger.error(f"Load filament failed for {self.printer.name}: {e}")
+
+    def unload_filament(self):
+        try:
+            self._api.unload_filament_spool()
+        except Exception as e:
+            logger.error(f"Unload filament failed for {self.printer.name}: {e}")
 
     def set_led(self, mode: str = "on"):
         try:

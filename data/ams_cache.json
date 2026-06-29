@@ -3,7 +3,7 @@
     {
       "ams_id": 0,
       "humidity": 3,
-      "temperature": 38.4,
+      "temperature": 36.4,
       "trays": [
         {
           "tray_id": 0,
@@ -11,7 +11,8 @@
           "material": "PLA",
           "nozzle_temp_min": "190",
           "nozzle_temp_max": "230",
-          "tray_id_name": "A00-W1"
+          "tray_id_name": "A00-W1",
+          "remaining": 41
         },
         {
           "tray_id": 1,
@@ -19,7 +20,8 @@
           "material": "PLA",
           "nozzle_temp_min": "190",
           "nozzle_temp_max": "230",
-          "tray_id_name": "A00-B8"
+          "tray_id_name": "A00-B8",
+          "remaining": 88
         },
         {
           "tray_id": 2,
@@ -27,7 +29,8 @@
           "material": "PLA",
           "nozzle_temp_min": "190",
           "nozzle_temp_max": "230",
-          "tray_id_name": "A00-B5"
+          "tray_id_name": "A00-B5",
+          "remaining": 100
         },
         {
           "tray_id": 3,
@@ -35,7 +38,8 @@
           "material": "PLA",
           "nozzle_temp_min": "190",
           "nozzle_temp_max": "230",
-          "tray_id_name": "A01-B6"
+          "tray_id_name": "A01-B6",
+          "remaining": 100
         }
       ]
     }

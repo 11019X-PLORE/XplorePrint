@@ -1,4 +1,4 @@
-﻿/**
+﻿﻿/**
  * XplorePrint - Main Application JavaScript
  * FRC Team 11019 Xplore
  * 3D Printer Management Software
@@ -202,9 +202,23 @@ class PrinterApp {
 
         let amsHTML = '';
         if (printer.ams_units && printer.ams_units.length > 0) {
+            const humidity = printer.ams_units[0].humidity || 0;
+            const humidityColor = humidity >= 5 ? 'var(--danger)' : humidity >= 4 ? 'var(--warning)' : 'var(--accent-green)';
+            const humidityLabel = humidity >= 5 ? '潮湿' : humidity >= 4 ? '偏湿' : '干燥';
+            const temp = printer.ams_units[0].temperature || 0;
             amsHTML = `
                 <div class="ams-section">
-                    <div class="ams-title">AMS 耗材 (${printer.ams_units.length} 槽)</div>
+                    <div class="ams-title">
+                        AMS 耗材 (${printer.ams_units.length} 槽)
+                        <span class="ams-humidity" style="color:${humidityColor};" title="AMS 湿度指数 (1-5)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>
+                            Lv.${humidity.toFixed(0)} ${humidityLabel}
+                        </span>
+                        <span class="ams-temp" title="AMS 温度">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
+                            ${temp.toFixed(1)}°C
+                        </span>
+                    </div>
                     <div class="ams-trays">
                         ${printer.ams_units.map(tray => {
                             const color = tray.color || '#CCCCCC';
@@ -1805,6 +1819,22 @@ class PrinterApp {
         this.showToast('设置已保存', 'success');
     }
 
+    updateFilamentMinTempSetting() {
+        const slider = document.getElementById('settingFilamentMinTemp');
+        const input = document.getElementById('settingFilamentMinTempInput');
+        const label = document.getElementById('settingFilamentMinTempLabel');
+        if (slider && input) {
+            if (document.activeElement === slider) {
+                input.value = slider.value;
+            } else if (document.activeElement === input) {
+                slider.value = input.value;
+            }
+            const val = parseInt(input.value) || 190;
+            if (label) label.textContent = val;
+            this.saveSetting('filamentMinTemp', val);
+        }
+    }
+
     loadSettings() {
         try {
             this._settings = JSON.parse(localStorage.getItem('xploreprint_settings')) || {};
@@ -1814,6 +1844,7 @@ class PrinterApp {
         this._settings.toastDuration = parseInt(this._settings.toastDuration) || 3;
         this._settings.refreshInterval = parseInt(this._settings.refreshInterval) || 5;
         this._settings.tempUnit = this._settings.tempUnit || 'celsius';
+        this._settings.filamentMinTemp = parseInt(this._settings.filamentMinTemp) || 190;
 
         const refreshEl = document.getElementById('settingRefreshInterval');
         if (refreshEl) refreshEl.value = this._settings.refreshInterval;
@@ -1821,6 +1852,12 @@ class PrinterApp {
         if (tempEl) tempEl.value = this._settings.tempUnit;
         const toastEl = document.getElementById('settingToastDuration');
         if (toastEl) toastEl.value = this._settings.toastDuration;
+        const filamentMinTempEl = document.getElementById('settingFilamentMinTemp');
+        if (filamentMinTempEl) filamentMinTempEl.value = this._settings.filamentMinTemp;
+        const filamentMinTempInputEl = document.getElementById('settingFilamentMinTempInput');
+        if (filamentMinTempInputEl) filamentMinTempInputEl.value = this._settings.filamentMinTemp;
+        const filamentMinTempLabelEl = document.getElementById('settingFilamentMinTempLabel');
+        if (filamentMinTempLabelEl) filamentMinTempLabelEl.textContent = this._settings.filamentMinTemp;
     }
 
     // ==================== 诊断测试 ====================
@@ -2174,6 +2211,52 @@ class PrinterApp {
                     <div class="gcode-history" id="gcodeHistory"></div>
                 </div>
 
+                <div class="ops-card full-width">
+                    <div class="ops-card-header">
+                        <div class="ops-card-icon" style="background:rgba(239,68,68,0.12);color:var(--danger);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
+                        </div>
+                        <div>
+                            <h4>挤出机 & 进退料</h4>
+                            <div class="ops-card-subtitle">喷嘴: ${printer.nozzle_temp}°C / 目标: <span id="extruderTargetDisplay">--</span>°C</div>
+                        </div>
+                    </div>
+                    <div class="extruder-control-row">
+                        <div class="extruder-temp-control">
+                            <span class="temp-control-label">喷嘴温度</span>
+                            <div class="temp-control-input">
+                                <input type="range" id="extruderTempSlider" min="0" max="300" value="${printer.nozzle_temp || 0}" oninput="manager.updateExtruderTemp()">
+                                <input type="number" id="extruderTempInput" min="0" max="300" value="${printer.nozzle_temp || 0}" oninput="manager.updateExtruderTemp()">
+                            </div>
+                            <span class="temp-control-value">°C</span>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="manager.applyExtruderTemp('${printer.id}')">加热</button>
+                    </div>
+${printer.ams_units && printer.ams_units.length > 0 ? `
+                    <div class="extruder-ams-row">
+                        <span class="ams-select-label">选择 AMS 料槽:</span>
+                        <select class="form-input" id="filamentAmsSelect">
+                            ${printer.ams_units.map(t => {
+                                const amsId = Math.floor(t.tray_id / 10);
+                                const trayId = t.tray_id % 10;
+                                return `<option value="${amsId},${trayId}">AMS ${amsId+1} 槽${trayId+1} — ${t.material} ${t.remaining}%</option>`;
+                            }).join('')}
+                        </select>
+                    </div>
+` : ''}
+                    <div class="extruder-filament-row">
+                        <button class="btn btn-outline btn-sm filament-btn" id="loadFilamentBtn" onclick="manager.loadFilamentFromAms('${printer.id}')" disabled title="进料前需实际温度达到最低温度">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="22 2 13.5 10.5"/><polyline points="11 13 2 22"/></svg>
+                            进料
+                        </button>
+                        <button class="btn btn-outline btn-sm filament-btn" id="unloadFilamentBtn" onclick="manager.sendCommand('${printer.id}','unload_filament')" disabled title="退料前需实际温度达到最低温度">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;transform:rotate(180deg);"><polyline points="22 2 13.5 10.5"/><polyline points="11 13 2 22"/></svg>
+                            退料
+                        </button>
+                        <span class="filament-lock-hint" id="filamentLockHint">🔒 喷嘴实际温度 <b>190°C</b> 解锁</span>
+                    </div>
+                </div>
+
                 ${isPrinting ? `
                 <div class="ops-card full-width">
                     <div class="ops-card-header">
@@ -2199,6 +2282,7 @@ class PrinterApp {
         `;
 
         this.bindOperationsEvents(printer);
+        this._updateFilamentButtons(printer.nozzle_temp || 0);
     }
 
     bindOperationsEvents(printer) {
@@ -2218,12 +2302,14 @@ class PrinterApp {
     applyTemperatures() {
         const printerId = this._selectedOpsPrinter;
         if (!printerId) return;
-        const nozzleTemp = parseInt(document.getElementById('nozzleTempInput').value) || 0;
-        const bedTemp = parseInt(document.getElementById('bedTempInput').value) || 0;
-        if (nozzleTemp > 0) {
+        const nozzleRaw = document.getElementById('nozzleTempInput').value;
+        const bedRaw = document.getElementById('bedTempInput').value;
+        const nozzleTemp = nozzleRaw !== '' ? parseInt(nozzleRaw) : NaN;
+        const bedTemp = bedRaw !== '' ? parseInt(bedRaw) : NaN;
+        if (!isNaN(nozzleTemp)) {
             this.sendCommand(printerId, 'set_nozzle_temp', { temp: nozzleTemp });
         }
-        if (bedTemp > 0) {
+        if (!isNaN(bedTemp)) {
             this.sendCommand(printerId, 'set_bed_temp', { temp: bedTemp });
         }
         this.showToast(`温度已设置: 喷头 ${nozzleTemp}°C / 热床 ${bedTemp}°C`, 'info');
@@ -2281,6 +2367,58 @@ class PrinterApp {
     applyChamberFan() {
         const speed = parseInt(document.getElementById('chamberFanSpeedSlider').value) || 0;
         this.setChamberFanSpeed(speed);
+    }
+
+    updateExtruderTemp() {
+        const slider = document.getElementById('extruderTempSlider');
+        const input = document.getElementById('extruderTempInput');
+        const targetDisplay = document.getElementById('extruderTargetDisplay');
+        if (slider && input) {
+            if (document.activeElement === slider) {
+                input.value = slider.value;
+            } else if (document.activeElement === input) {
+                slider.value = input.value;
+            }
+            const temp = parseInt(input.value) || 0;
+            if (targetDisplay) targetDisplay.textContent = temp;
+        }
+    }
+
+    _updateFilamentButtons(actualTemp) {
+        const MIN_TEMP = parseInt(this._settings?.filamentMinTemp) || 190;
+        const loadBtn = document.getElementById('loadFilamentBtn');
+        const unloadBtn = document.getElementById('unloadFilamentBtn');
+        const lockHint = document.getElementById('filamentLockHint');
+        const unlocked = actualTemp >= MIN_TEMP;
+        if (loadBtn) {
+            loadBtn.disabled = !unlocked;
+            loadBtn.style.opacity = unlocked ? '1' : '0.5';
+        }
+        if (unloadBtn) {
+            unloadBtn.disabled = !unlocked;
+            unloadBtn.style.opacity = unlocked ? '1' : '0.5';
+        }
+        if (lockHint) {
+            if (unlocked) {
+                lockHint.innerHTML = '✅ 实际温度达标，可进退料';
+                lockHint.style.color = 'var(--accent-green)';
+            } else {
+                lockHint.innerHTML = '🔒 喷嘴实际温度达到 <b>' + MIN_TEMP + '°C</b> 解锁 (当前 ' + actualTemp.toFixed(1) + '°C)';
+                lockHint.style.color = 'var(--text-muted)';
+            }
+        }
+    }
+
+    loadFilamentFromAms(printerId) {
+        const select = document.getElementById('filamentAmsSelect');
+        let amsId = null, trayId = null;
+        if (select && select.value) {
+            const parts = select.value.split(',');
+            amsId = parseInt(parts[0]);
+            trayId = parseInt(parts[1]);
+        }
+        this.sendCommand(printerId, 'load_filament', { ams_id: amsId, tray_id: trayId });
+        this.showToast('正在进料...', 'info');
     }
 
     setMoveStep(step, btn) {

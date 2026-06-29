@@ -695,6 +695,30 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ams-humidity {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.ams-temp {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-muted);
 }
 
 .ams-trays {
@@ -2974,6 +2998,65 @@ select.form-input {
     color: var(--text-muted);
     max-height: 60px;
     overflow-y: auto;
+}
+
+.extruder-control-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.extruder-temp-control {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.extruder-filament-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--bg-tertiary);
+}
+
+.extruder-ams-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.ams-select-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.extruder-ams-row .form-input {
+    flex: 1;
+    font-size: 12px;
+    padding: 5px 10px;
+}
+
+.filament-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    padding: 6px 16px;
+}
+
+.filament-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.filament-lock-hint {
+    font-size: 12px;
+    margin-left: 4px;
 }
 
 .light-toggle {

@@ -468,6 +468,13 @@
                                 <option value="5">5 秒</option>
                             </select>
                         </div>
+                        <div class="form-group">
+                            <label>进退料最低解锁温度 (°C): <span id="settingFilamentMinTempLabel">190</span></label>
+                            <div class="temp-control-input" style="max-width:260px;">
+                                <input type="range" id="settingFilamentMinTemp" min="190" max="300" value="190" oninput="manager.updateFilamentMinTempSetting()">
+                                <input type="number" id="settingFilamentMinTempInput" min="190" max="300" value="190" oninput="manager.updateFilamentMinTempSetting()">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="settings-card">
