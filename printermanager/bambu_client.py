@@ -10,6 +10,8 @@ Wraps the bambulabs_api library for communication with Bambu Lab 3D printers.
 """
 
 import logging
+import re
+import subprocess
 import threading
 import time
 from typing import Optional, Callable
@@ -462,17 +464,30 @@ class BambuClient:
 
     def test_latency(self) -> dict:
         try:
-            if not self._connected:
-                return {"success": False, "message": "打印机未连接"}
+            ip = self.printer.ip_address
+            if not ip:
+                return {"success": False, "message": "打印机无 IP 地址"}
+
+            cmd = ["ping", "-n", "1", "-w", "2000", ip]
             t0 = time.time()
-            self._api.ping()
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
             t1 = time.time()
             latency_ms = round((t1 - t0) * 1000, 1)
+
+            if result.returncode != 0:
+                return {"success": False, "message": f"Ping 超时 (>{latency_ms}ms)"}
+
+            match = re.search(r"time[=<]\s*(\d+)\s*ms", result.stdout, re.IGNORECASE)
+            if match:
+                latency_ms = int(match.group(1))
+
             return {
                 "success": True,
                 "printer_response_ms": latency_ms,
-                "message": f"打印机延迟: {latency_ms}ms",
+                "message": f"Ping 延迟: {latency_ms}ms",
             }
+        except subprocess.TimeoutExpired:
+            return {"success": False, "message": "Ping 超时 (3s)"}
         except Exception as e:
             return {"success": False, "message": f"延迟测试失败: {e}"}
 
