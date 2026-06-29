@@ -146,6 +146,9 @@ class BambuClient:
 
             if gcode_state == bl.GcodeState.FAILED:
                 self.printer.error_message = str(self._api.print_error_code)
+                self.printer.hms_code = self._safe_int(self._api.print_error_code)
+            else:
+                self.printer.hms_code = 0
 
             self.printer.nozzle_temp = self._safe_float(self._api.get_nozzle_temperature())
             self.printer.target_nozzle_temp = self._safe_float(
@@ -472,6 +475,28 @@ class BambuClient:
             }
         except Exception as e:
             return {"success": False, "message": f"延迟测试失败: {e}"}
+
+    def get_hms_error(self) -> dict:
+        """Get HMS error code and wiki lookup URL."""
+        wikiname = self.printer.name
+        hms_code = 0
+        try:
+            if self._api.mqtt_client_ready():
+                hms_code = self._safe_int(self._api.print_error_code)
+        except Exception:
+            hms_code = self.printer.hms_code or 0
+
+        wiki_url = ""
+        if hms_code and hms_code != 0:
+            wiki_url = f"https://wiki.bambulab.com/zh/hms/{hms_code}"
+
+        return {
+            "printer_name": self.printer.name,
+            "hms_code": hms_code,
+            "wiki_url": wiki_url,
+            "wiki_home": "https://wiki.bambulab.com/zh/hms/home",
+            "has_error": hms_code != 0,
+        }
 
     @property
     def is_connected(self) -> bool:

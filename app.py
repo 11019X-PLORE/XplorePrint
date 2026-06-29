@@ -298,7 +298,46 @@ def upload_queue_file():
     safe_name = f"{_uuid.uuid4().hex}_{file.filename}"
     save_path = _os.path.join(queue_dir, safe_name)
     file.save(save_path)
-    return jsonify({"success": True, "path": save_path, "filename": file.filename})
+
+    material = request.form.get("material", "PLA")
+    analysis = None
+    fname_lower = file.filename.lower()
+    if fname_lower.endswith(".gcode") or fname_lower.endswith(".gcode.3mf"):
+        try:
+            from printermanager.gcode_parser import quick_analyze
+            logger.info(f"Parsing G-code: {file.filename} ({save_path})")
+            analysis = quick_analyze(save_path, material)
+            logger.info(f"G-code parsed: {analysis}")
+        except Exception as e:
+            logger.error(f"G-code parse failed for {file.filename}: {e}", exc_info=True)
+            analysis = {"error": str(e)}
+
+    return jsonify({
+        "success": True,
+        "path": save_path,
+        "filename": file.filename,
+        "analysis": analysis,
+    })
+
+
+# ==================== G-code 解析 ====================
+
+@app.route("/api/gcode/analyze", methods=["POST"])
+def analyze_gcode():
+    from printermanager.gcode_parser import quick_analyze
+    data = request.json or {}
+    file_path = data.get("path", "")
+    material = data.get("material", "PLA")
+    if not file_path:
+        return jsonify({"success": False, "message": "未提供文件路径"}), 400
+    import os as _os
+    if not _os.path.exists(file_path):
+        return jsonify({"success": False, "message": "文件不存在"}), 404
+    try:
+        result = quick_analyze(file_path, material)
+        return jsonify({"success": True, "analysis": result})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 # ==================== 诊断 API ====================
@@ -325,6 +364,12 @@ def printer_latency():
         "printer_response_ms": result.get("printer_response_ms"),
         "message": result.get("message", ""),
     })
+
+
+@app.route("/api/printer/<printer_id>/hms", methods=["GET"])
+def printer_hms_error(printer_id):
+    result = manager.get_hms_error(printer_id)
+    return jsonify(result)
 
 
 # ==================== 打印历史 API ====================

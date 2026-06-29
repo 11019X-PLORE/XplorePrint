@@ -243,9 +243,27 @@ class PrinterApp {
 
         let errorHTML = '';
         if (printer.status === 'error' && printer.error_message) {
+            const hmsCode = printer.hms_code || 0;
+            const wikiUrl = hmsCode ? `https://wiki.bambulab.com/zh/hms/${hmsCode}` : '';
+            const wikiHome = 'https://wiki.bambulab.com/zh/hms/home';
             errorHTML = `
-                <div style="font-size:12px;color:var(--red);margin-bottom:12px;padding:8px;background:rgba(239,68,68,0.1);border-radius:6px;">
-                    ${this.escapeHtml(printer.error_message)}
+                <div class="hms-error-box">
+                    <div class="hms-error-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        <span>HMS 错误</span>
+                    </div>
+                    <div class="hms-error-code">
+                        <span class="hms-code-label">错误码</span>
+                        <span class="hms-code-value">${hmsCode || 'N/A'}</span>
+                    </div>
+                    ${wikiUrl ? `<a href="${wikiUrl}" target="_blank" rel="noopener noreferrer" class="hms-lookup-link">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        查看此错误码
+                    </a>` : ''}
+                    <a href="${wikiHome}" target="_blank" rel="noopener noreferrer" class="hms-lookup-link hms-home-link">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        搜索 HMS 数据库
+                    </a>
                 </div>
             `;
         }
@@ -485,20 +503,32 @@ class PrinterApp {
 
     async addQueueItem(data) {
         if (this._queueFile) {
-            const formData = new FormData();
-            formData.append('file', this._queueFile);
-            formData.append('printer_id', data.printer_id);
-            try {
-                const uploadRes = await fetch('/api/queue/upload', {
-                    method: 'POST',
-                    body: formData,
-                });
-                const uploadResult = await uploadRes.json();
-                if (uploadResult.success) {
-                    data.file_path = uploadResult.path;
+            if (this._queueAnalysis && this._queueAnalysis._uploadPath) {
+                data.file_path = this._queueAnalysis._uploadPath;
+            } else {
+                const formData = new FormData();
+                formData.append('file', this._queueFile);
+                formData.append('printer_id', data.printer_id);
+                formData.append('material', data.material || 'PLA');
+                try {
+                    const uploadRes = await fetch('/api/queue/upload', {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    const uploadResult = await uploadRes.json();
+                    if (uploadResult.success) {
+                        data.file_path = uploadResult.path;
+                        const analysis = uploadResult.analysis;
+                        if (analysis) {
+                            if (!data.estimated_time && analysis.estimated_time_minutes > 0) {
+                                data.estimated_time = Math.round(analysis.estimated_time_minutes);
+                            }
+                            data._analysis = analysis;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Queue file upload failed:', e);
                 }
-            } catch (e) {
-                console.error('Queue file upload failed:', e);
             }
         }
         try {
@@ -510,6 +540,7 @@ class PrinterApp {
             const result = await res.json();
             if (result.status === 'ok') {
                 this._queueFile = null;
+                this._queueAnalysis = null;
                 this.showToast('已添加到打印队列', 'success');
                 closeQueueModal();
                 this.loadQueue();
@@ -574,6 +605,80 @@ class PrinterApp {
         info.style.display = 'block';
         info.innerHTML = `<span style="color:var(--accent-green);">${this.escapeHtml(file.name)}</span> (${(file.size / 1024 / 1024).toFixed(1)} MB)`;
         document.getElementById('queueUploadZone').style.borderColor = 'var(--accent-green)';
+
+        const isGcode = file.name.toLowerCase().endsWith('.gcode') || file.name.toLowerCase().endsWith('.gcode.3mf');
+        const btn = document.getElementById('gcodeAnalyzeBtn');
+        const panel = document.getElementById('gcodeAnalysis');
+        if (isGcode) {
+            if (btn) btn.style.display = 'inline-flex';
+            if (panel) panel.style.display = 'none';
+            this._queueAnalysis = null;
+        } else {
+            if (btn) btn.style.display = 'none';
+            if (panel) panel.style.display = 'none';
+            this._queueAnalysis = null;
+        }
+    }
+
+    analyzeGcodeNow() {
+        const file = this._queueFile;
+        if (!file) return;
+        this._analyzeSelectedFile(file);
+    }
+
+    async _analyzeSelectedFile(file) {
+        const panel = document.getElementById('gcodeAnalysis');
+        panel.style.display = 'block';
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setVal('gaSlicerTime', '解析中...');
+        setVal('gaMaterial', '--');
+        setVal('gaLength', '--');
+        setVal('gaLayers', '--');
+        setVal('gaBbox', '--');
+        setVal('gaLines', '--');
+        setVal('gaTotalLines', '--');
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('material', document.getElementById('queueMaterial')?.value || 'PLA');
+            const res = await fetch('/api/queue/upload', { method: 'POST', body: formData });
+            const result = await res.json();
+            const analysis = result.analysis;
+            if (analysis) {
+                if (analysis.error) {
+                    setVal('gaSlicerTime', '解析错误');
+                    console.error('G-code parse error:', analysis.error);
+                    panel.classList.remove('gcode-analysis-loaded');
+                    return;
+                }
+                this._queueAnalysis = analysis;
+                this._queueAnalysis._uploadPath = result.path;
+                const mins = Math.round(analysis.estimated_time_minutes);
+                if (mins > 0) {
+                    document.getElementById('queueTime').value = mins;
+                }
+                setVal('gaSlicerTime', mins > 0 ? `${mins} 分钟` : 'N/A');
+                setVal('gaMaterial', `${analysis.material_grams.toFixed(1)} g`);
+                setVal('gaLength', `${analysis.filament_length_mm.toFixed(0)} mm`);
+                setVal('gaLayers', analysis.layer_count > 0 ? `${analysis.layer_count} 层` : 'N/A');
+                const bb = analysis.bounding_box;
+                if (bb && bb.x_max > bb.x_min) {
+                    setVal('gaBbox', `${(bb.x_max - bb.x_min).toFixed(0)}×${(bb.y_max - bb.y_min).toFixed(0)}×${(bb.z_max - bb.z_min).toFixed(0)} mm`);
+                } else {
+                    setVal('gaBbox', 'N/A');
+                }
+                setVal('gaLines', `${analysis.print_lines.toLocaleString()} 行`);
+                setVal('gaTotalLines', `${analysis.total_lines.toLocaleString()} 行`);
+                panel.classList.add('gcode-analysis-loaded');
+            } else {
+                setVal('gaSlicerTime', '解析失败');
+                panel.classList.remove('gcode-analysis-loaded');
+            }
+        } catch (e) {
+            setVal('gaSlicerTime', '解析失败');
+            panel.classList.remove('gcode-analysis-loaded');
+        }
     }
 
     onQueueFileSelectChange() {

@@ -108,6 +108,7 @@ class Printer:
     current_file: str = ""
     last_updated: datetime = field(default_factory=datetime.now)
     error_message: str = ""
+    hms_code: int = 0
     wifi_signal: int = 0
 
 

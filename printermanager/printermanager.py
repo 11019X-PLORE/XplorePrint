@@ -415,6 +415,7 @@ class PrinterManager:
             ],
             "current_file": printer.current_file,
             "error_message": printer.error_message,
+            "hms_code": printer.hms_code,
             "wifi_signal": printer.wifi_signal,
         }
 
@@ -488,6 +489,19 @@ class PrinterManager:
         if not client:
             return {"success": False, "message": "打印机未连接"}
         return client.test_latency()
+
+    def get_hms_error(self, printer_id: str) -> dict:
+        """Get HMS error code and wiki lookup URL for a printer."""
+        client = self._clients.get(printer_id)
+        if not client:
+            return {
+                "printer_name": self._printers.get(printer_id, Printer(id="", name="Unknown")).name,
+                "hms_code": 0,
+                "wiki_url": "",
+                "wiki_home": "https://wiki.bambulab.com/zh/hms/home",
+                "has_error": False,
+            }
+        return client.get_hms_error()
 
     def start_print(self, printer_id: str, filename: str, plate_number: int = 1,
                     use_ams: bool = True, ams_mapping: list[int] = None,

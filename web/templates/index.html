@@ -623,6 +623,10 @@
                             </div>
                             <input type="file" id="queueFileInput" accept=".gcode,.3mf,.gcode.3mf" style="display:none;" onchange="manager.onQueueFileSelected()">
                             <div class="queue-file-info" id="queueFileInfo" style="display:none;"></div>
+                            <button type="button" class="btn btn-sm btn-outline" id="gcodeAnalyzeBtn" style="display:none;margin-top:8px;" onclick="manager.analyzeGcodeNow()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
+                                解析 G-code
+                            </button>
                         </div>
                         <div class="queue-file-or">或</div>
                         <div class="queue-file-dropdown">
@@ -651,6 +655,42 @@
                 <div class="form-group">
                     <label>预计时间 (分钟)</label>
                     <input type="number" class="form-input" id="queueTime" placeholder="0" min="0">
+                </div>
+                <div class="gcode-analysis" id="gcodeAnalysis" style="display:none;">
+                    <div class="gcode-analysis-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
+                        G-code 解析结果
+                    </div>
+                    <div class="gcode-analysis-grid">
+                        <div class="gcode-analysis-item">
+                            <span class="gcode-analysis-label">切片预估时间</span>
+                            <span class="gcode-analysis-value" id="gaSlicerTime">--</span>
+                        </div>
+                        <div class="gcode-analysis-item">
+                            <span class="gcode-analysis-label">耗材用量</span>
+                            <span class="gcode-analysis-value" id="gaMaterial">--</span>
+                        </div>
+                        <div class="gcode-analysis-item">
+                            <span class="gcode-analysis-label">耗材长度</span>
+                            <span class="gcode-analysis-value" id="gaLength">--</span>
+                        </div>
+                        <div class="gcode-analysis-item">
+                            <span class="gcode-analysis-label">层数</span>
+                            <span class="gcode-analysis-value" id="gaLayers">--</span>
+                        </div>
+                        <div class="gcode-analysis-item">
+                            <span class="gcode-analysis-label">模型尺寸</span>
+                            <span class="gcode-analysis-value" id="gaBbox">--</span>
+                        </div>
+                        <div class="gcode-analysis-item">
+                            <span class="gcode-analysis-label">打印行数</span>
+                            <span class="gcode-analysis-value" id="gaLines">--</span>
+                        </div>
+                        <div class="gcode-analysis-item">
+                            <span class="gcode-analysis-label">总行数</span>
+                            <span class="gcode-analysis-value" id="gaTotalLines">--</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>优先级</label>

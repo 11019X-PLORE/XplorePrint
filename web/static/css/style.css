@@ -1270,6 +1270,164 @@ select.form-input {
     }
 }
 
+/* HMS Error Box */
+.hms-error-box {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.hms-error-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--red);
+    margin-bottom: 10px;
+}
+
+.hms-error-code {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.hms-code-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.hms-code-value {
+    font-size: 20px;
+    font-weight: 700;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--red);
+    background: rgba(239, 68, 68, 0.12);
+    padding: 4px 12px;
+    border-radius: 6px;
+    letter-spacing: 2px;
+}
+
+.hms-lookup-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--accent-blue);
+    text-decoration: none;
+    padding: 6px 12px;
+    background: rgba(59, 130, 246, 0.08);
+    border-radius: 6px;
+    transition: all 0.15s;
+    margin-right: 8px;
+    margin-bottom: 4px;
+}
+
+.hms-lookup-link:hover {
+    background: rgba(59, 130, 246, 0.16);
+    color: #60a5fa;
+}
+
+.hms-home-link {
+    color: var(--text-muted);
+    background: rgba(156, 163, 175, 0.08);
+}
+
+.hms-home-link:hover {
+    color: var(--text-secondary);
+    background: rgba(156, 163, 175, 0.16);
+}
+
+#gcodeAnalyzeBtn {
+    width: 100%;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+    padding: 8px 12px;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+    background: transparent;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s;
+}
+
+#gcodeAnalyzeBtn:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.06);
+}
+
+/* G-code Analysis Panel */
+.gcode-analysis {
+    background: rgba(59, 130, 246, 0.06);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.gcode-analysis.gcode-analysis-loaded {
+    border-color: rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.04);
+}
+
+.gcode-analysis-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    margin-bottom: 10px;
+}
+
+.gcode-analysis-loaded .gcode-analysis-header {
+    color: var(--accent-green);
+}
+
+.gcode-analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+@media (max-width: 640px) {
+    .gcode-analysis-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.gcode-analysis-item {
+    background: var(--bg-card);
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+}
+
+.gcode-analysis-label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.gcode-analysis-value {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
 /* Toast */
 .toast-container {
     position: fixed;

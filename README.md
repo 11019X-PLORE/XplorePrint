@@ -46,6 +46,7 @@
 - 自定义 G-code 发送
 - **操纵杆式 XYZ 轴移动**（±1mm / ±10mm 步长切换，十字键布局 + 归位按钮）
 - 摄像头实时流预览
+- **HMS 错误处理**：自动捕获打印机 HMS 错误码，一键跳转 Bambu Lab Wiki 查询解决方案
 
 ### AMS 预览
 - 显示所有 AMS 单元插槽
@@ -205,6 +206,7 @@ XplorePrint/
 | POST | `/api/schedule/apply` | 应用智能调度排序 |
 | POST | `/api/schedule/start` | 确认开打 |
 | GET | `/api/history` | 打印历史 |
+| GET | `/api/printer/<id>/hms` | 获取打印机 HMS 错误码及 Wiki 链接 |
 | GET | `/api/filaments` | 耗材库存 |
 | GET | `/api/robots` | 机器人列表 |
 | GET | `/api/parts/library` | FRC 零件库 |
