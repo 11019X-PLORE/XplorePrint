@@ -32,6 +32,7 @@ class BambuClient:
     """
 
     POLL_INTERVAL = 2.0
+    MAX_CONSECUTIVE_ERRORS = 10
 
     def __init__(self, printer: Printer):
         self.printer = printer
@@ -45,6 +46,7 @@ class BambuClient:
         self._poll_thread: Optional[threading.Thread] = None
         self._stop_poll = threading.Event()
         self._cached_ams_data: list[dict] = []
+        self._consecutive_errors = 0
 
     def register_callback(self, callback: Callable):
         self._callbacks.append(callback)
@@ -53,6 +55,7 @@ class BambuClient:
         try:
             self._api.connect()
             self._connected = True
+            self._consecutive_errors = 0
             self.printer.status = PrinterStatus.ONLINE
 
             self._wait_for_printer_ready()
@@ -123,8 +126,19 @@ class BambuClient:
         while not self._stop_poll.is_set():
             try:
                 self._update_state()
+                self._consecutive_errors = 0
             except Exception as e:
-                logger.debug(f"Poll error for {self.printer.name}: {e}")
+                self._consecutive_errors += 1
+                self.printer.status = PrinterStatus.ERROR
+                if self._consecutive_errors == 1:
+                    logger.warning(f"Poll error for {self.printer.name}: {e}")
+                elif self._consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
+                    logger.error(
+                        f"{self.printer.name}: {self._consecutive_errors} consecutive poll errors, "
+                        f"marking as offline"
+                    )
+                    self._connected = False
+                    self.printer.status = PrinterStatus.OFFLINE
             self._stop_poll.wait(self.POLL_INTERVAL)
 
     def _update_state(self):
