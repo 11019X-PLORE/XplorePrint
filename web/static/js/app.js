@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * XplorePrint - Main Application JavaScript
  * FRC Team 11019 Xplore
  * 3D Printer Management Software
@@ -80,6 +80,7 @@ class PrinterApp {
             this.loadChecklist();
         } else if (view === 'settings') {
             this.loadExportPathSetting();
+            this.loadTeamInfo();
         } else if (view === 'toolbox') {
             this.renderToolbox();
         } else if (view === 'g3d') {
@@ -3691,6 +3692,22 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
             this.showToast('导出路径已保存', 'success');
         } catch (e) {
             this.showToast('保存失败', 'error');
+        }
+    }
+
+    async loadTeamInfo() {
+        const el = document.getElementById('teamInfoMarkdown');
+        if (!el) return;
+        try {
+            const res = await fetch('/api/team-info');
+            const data = await res.json();
+            if (data.success) {
+                el.innerHTML = data.html;
+            } else {
+                el.innerHTML = '<p class="text-muted">队伍信息加载失败</p>';
+            }
+        } catch (e) {
+            el.innerHTML = '<p class="text-muted">队伍信息加载失败</p>';
         }
     }
 

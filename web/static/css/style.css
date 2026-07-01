@@ -961,6 +961,24 @@ select.form-input {
     line-height: 1.6;
 }
 
+/* Team Info Markdown */
+.team-info-markdown {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+
+.team-info-markdown .md-h1 { font-size: 22px; font-weight: 700; color: var(--text-primary); margin: 0 0 12px; }
+.team-info-markdown .md-h2 { font-size: 17px; font-weight: 600; color: var(--text-primary); margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
+.team-info-markdown .md-h3 { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 12px 0 6px; }
+.team-info-markdown .md-p  { margin: 0 0 8px; color: var(--text-secondary); }
+.team-info-markdown .md-ul { margin: 0 0 12px; padding-left: 20px; list-style: disc; }
+.team-info-markdown .md-li { margin: 4px 0; }
+.team-info-markdown .md-hr { border: none; border-top: 1px solid var(--border-color); margin: 16px 0; }
+.team-info-markdown .md-link { color: var(--accent-blue-light); text-decoration: none; }
+.team-info-markdown .md-link:hover { text-decoration: underline; }
+.team-info-markdown .loading-placeholder { color: var(--text-muted); font-style: italic; }
+
 .settings-desc {
     font-size: 13px;
     color: var(--text-muted);

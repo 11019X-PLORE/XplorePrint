@@ -144,7 +144,7 @@
 ### 设置
 - SD 卡导出路径配置
 - 系统日志查看与导出
-- 队伍信息展示
+- **队伍信息**：读取 `TEAM.md` 文件并以 Markdown 格式渲染展示，支持所见即所得查阅
 
 ---
 
@@ -203,6 +203,7 @@ XplorePrint/
 ├── app.py                          # Flask 主应用 + API 路由
 ├── server_control.bat              # Windows 服务器管理工具（启动/停止/重启/打开浏览器）
 ├── set_admin_key.py                # 管理员密钥设置工具
+├── TEAM.md                         # 队伍信息（Markdown 格式，在设置页渲染展示）
 ├── config.json                     # 打印机配置
 ├── requirements.txt                # Python 依赖
 ├── data/                           # 持久化数据目录

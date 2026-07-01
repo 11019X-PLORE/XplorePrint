@@ -342,6 +342,93 @@ def view_logs():
     })
 
 
+@app.route("/api/team-info", methods=["GET"])
+def team_info():
+    md_path = os.path.join(os.path.dirname(__file__), "TEAM.md")
+    if not os.path.exists(md_path):
+        return jsonify({"success": False, "message": "TEAM.md 不存在"}), 404
+    with open(md_path, "r", encoding="utf-8") as f:
+        raw = f.read()
+    html = _markdown_to_html(raw)
+    return jsonify({"success": True, "html": html, "raw": raw})
+
+
+@app.route("/api/team-info", methods=["PUT"])
+def team_info_update():
+    data = request.json or {}
+    if not verify_admin_key(data.get("admin_key", "")):
+        return jsonify({"success": False, "message": "管理员密钥错误"}), 403
+    md_path = os.path.join(os.path.dirname(__file__), "TEAM.md")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(data.get("content", ""))
+    return jsonify({"success": True, "message": "队伍信息已更新"})
+
+
+def _markdown_to_html(md: str) -> str:
+    import re
+    lines = md.split("\n")
+    result = []
+    i = 0
+    in_list = False
+    while i < len(lines):
+        line = lines[i]
+        if line.strip() == "---":
+            result.append('<hr class="md-hr">')
+            i += 1
+            continue
+        if line.startswith("### "):
+            if in_list:
+                result.append("</ul>")
+                in_list = False
+            result.append(f'<h3 class="md-h3">{_inline_md(line[4:])}</h3>')
+            i += 1
+            continue
+        if line.startswith("## "):
+            if in_list:
+                result.append("</ul>")
+                in_list = False
+            result.append(f'<h2 class="md-h2">{_inline_md(line[3:])}</h2>')
+            i += 1
+            continue
+        if line.startswith("# "):
+            if in_list:
+                result.append("</ul>")
+                in_list = False
+            result.append(f'<h1 class="md-h1">{_inline_md(line[2:])}</h1>')
+            i += 1
+            continue
+        if line.startswith("- ") or line.startswith("* "):
+            if not in_list:
+                result.append('<ul class="md-ul">')
+                in_list = True
+            result.append(f'<li class="md-li">{_inline_md(line[2:])}</li>')
+            i += 1
+            continue
+        if line.strip() == "":
+            if in_list:
+                result.append("</ul>")
+                in_list = False
+            i += 1
+            continue
+        if in_list:
+            result.append("</ul>")
+            in_list = False
+        if line.strip():
+            result.append(f'<p class="md-p">{_inline_md(line)}</p>')
+        i += 1
+    if in_list:
+        result.append("</ul>")
+    return "\n".join(result)
+
+
+def _inline_md(text: str) -> str:
+    import re
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" target="_blank" class="md-link">\1</a>', text)
+    return text
+
+
 @app.route("/api/printers/<printer_id>/upload", methods=["POST"])
 def upload_to_printer(printer_id):
     if "file" not in request.files:
