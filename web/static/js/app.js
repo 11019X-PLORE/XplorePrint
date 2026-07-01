@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * XplorePrint - Main Application JavaScript
  * FRC Team 11019 Xplore
  * 3D Printer Management Software
@@ -3714,8 +3714,9 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
                     </div>
                     <div class="g3d-project-info">
-                        <div class="g3d-project-name">${this._escapeHtml(p.name)}</div>
+                        <div class="g3d-project-name">${this._escapeHtml(p.name)}<span class="g3d-visibility-badge">${p.visibility === 'private' ? 'Private' : 'Public'}</span></div>
                         <div class="g3d-project-desc">${this._escapeHtml(p.description || '暂无描述')}</div>
+                        ${(p.tags && p.tags.length) ? `<div class="g3d-project-tags">${p.tags.map(t => `<span class="g3d-project-tag">${this._escapeHtml(t)}</span>`).join('')}</div>` : ''}
                     </div>
                     <div class="g3d-project-meta">
                         <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${p.file_count || 0}</span>
@@ -3738,9 +3739,20 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
             const project = await res.json();
             document.getElementById('g3dDetailName').textContent = project.name;
             document.getElementById('g3dDetailDesc').textContent = project.description || '';
+            const badge = document.getElementById('g3dVisibilityBadge');
+            badge.textContent = project.visibility === 'private' ? 'Private' : 'Public';
+            badge.className = 'g3d-visibility-badge' + (project.visibility === 'private' ? ' private' : '');
+            document.getElementById('g3dStatFiles').textContent = project.file_count || 0;
+            document.getElementById('g3dStatCommits').textContent = project.commit_count || 0;
+            document.getElementById('g3dStatBranch').textContent = project.default_branch || 'main';
+            const updatedSpan = document.querySelector('#g3dStatUpdated span');
+            if (updatedSpan) updatedSpan.textContent = this._formatDate(project.updated_at);
+            this._renderG3DTags(project.tags || []);
             this._renderG3DFiles(project.files || []);
             this._renderG3DCommits(project.commits || []);
             this._renderG3DStaging();
+            this._renderG3DReadme(project.readme || '');
+            this._renderG3DAssembly(project.assembly);
         } catch (e) {
             this.showToast('加载项目失败', 'error');
         }
@@ -3781,9 +3793,15 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
 
     async g3dDeleteCurrentProject() {
         if (!this._g3dProjectId) return;
-        if (!confirm('确定要删除此项目吗？所有文件和提交历史将被永久删除。')) return;
+        const key = prompt('⚠️ 删除项目需要管理员密钥，请输入密钥:');
+        if (!key) return;
+        if (!confirm('确定要删除此项目吗？所有文件和提交历史将被永久删除。此操作不可撤销！')) return;
         try {
-            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}`, { method: 'DELETE' });
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_key: key })
+            });
             const data = await res.json();
             if (data.success) {
                 this.showToast('项目已删除', 'success');
@@ -3793,6 +3811,30 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
             }
         } catch (e) {
             this.showToast('删除失败', 'error');
+        }
+    }
+
+    async _g3dEditProject() {
+        const name = document.getElementById('g3dDetailName').textContent;
+        const desc = document.getElementById('g3dDetailDesc').textContent;
+        const newName = prompt('项目名称:', name);
+        if (!newName || !newName.trim()) return;
+        const newDesc = prompt('项目描述:', desc || '');
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName.trim(), description: (newDesc || '').trim() })
+            });
+            const data = await res.json();
+            if (data.success) {
+                this.showToast('项目已更新', 'success');
+                this.g3dOpenProject(this._g3dProjectId);
+            } else {
+                this.showToast(data.message || '更新失败', 'error');
+            }
+        } catch (e) {
+            this.showToast('更新失败', 'error');
         }
     }
 
@@ -3912,9 +3954,14 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
                         <div class="g3d-file-name">${this._escapeHtml(f.name)}</div>
                         <div class="g3d-file-meta">${f.size_kb} KB</div>
                     </div>
-                    <a class="g3d-file-download" href="/api/g3d/projects/${this._g3dProjectId}/download/${encodeURIComponent(f.name)}" title="下载">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    </a>
+                    <div class="g3d-file-actions">
+                        <a class="g3d-file-download" href="/api/g3d/projects/${this._g3dProjectId}/download/${encodeURIComponent(f.name)}" title="下载">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </a>
+                        <button class="g3d-file-delete" onclick="event.preventDefault();manager._g3dDeleteFile('${this._escapeHtml(f.name).replace(/'/g, "\\'")}')" title="删除文件">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                        </button>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -3950,9 +3997,15 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
     }
 
     async _g3dDeleteCommit(commitId) {
+        const key = prompt('⚠️ 删除提交需要管理员密钥，请输入密钥:');
+        if (!key) return;
         if (!confirm('确定要删除此提交吗？')) return;
         try {
-            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/commits/${commitId}`, { method: 'DELETE' });
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/commits/${commitId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_key: key })
+            });
             const data = await res.json();
             if (data.success) {
                 this.showToast('提交已删除', 'success');
@@ -3963,6 +4016,274 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
         } catch (e) {
             this.showToast('删除失败', 'error');
         }
+    }
+
+    async _g3dDeleteFile(filename) {
+        const key = prompt('⚠️ 删除文件需要管理员密钥，请输入密钥:');
+        if (!key) return;
+        if (!confirm(`确定要删除文件 "${filename}" 吗？此操作不可撤销。`)) return;
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/files/${encodeURIComponent(filename)}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_key: key })
+            });
+            const data = await res.json();
+            if (data.success) {
+                this.showToast('文件已删除', 'success');
+                this.g3dOpenProject(this._g3dProjectId);
+            } else {
+                this.showToast(data.message || '删除失败', 'error');
+            }
+        } catch (e) {
+            this.showToast('删除失败', 'error');
+        }
+    }
+
+    _g3dFilterProjects(query) {
+        const q = (query || '').toLowerCase();
+        document.querySelectorAll('.g3d-project-card').forEach(card => {
+            const name = (card.querySelector('.g3d-project-name')?.textContent || '').toLowerCase();
+            const desc = (card.querySelector('.g3d-project-desc')?.textContent || '').toLowerCase();
+            card.style.display = (!q || name.includes(q) || desc.includes(q)) ? '' : 'none';
+        });
+    }
+
+    _renderG3DTags(tags) {
+        const row = document.getElementById('g3dTagsRow');
+        if (!row) return;
+        let html = (tags || []).map(t => `
+            <span class="g3d-tag">${this._escapeHtml(t)}<span class="g3d-tag-remove" onclick="manager._g3dRemoveTag('${this._escapeHtml(t).replace(/'/g, "\\'")}')">&times;</span></span>
+        `).join('');
+        html += '<span class="g3d-tag-add" onclick="manager._g3dAddTag()">+ 添加标签</span>';
+        row.innerHTML = html;
+    }
+
+    async _g3dRemoveTag(tag) {
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}`);
+            const project = await res.json();
+            const tags = (project.tags || []).filter(t => t !== tag);
+            await fetch(`/api/g3d/projects/${this._g3dProjectId}/tags`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tags })
+            });
+            this._renderG3DTags(tags);
+        } catch (e) {
+            /* ignore */
+        }
+    }
+
+    async _g3dAddTag() {
+        const tag = prompt('输入新标签:');
+        if (!tag || !tag.trim()) return;
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}`);
+            const project = await res.json();
+            const tags = [...(project.tags || []), tag.trim()];
+            await fetch(`/api/g3d/projects/${this._g3dProjectId}/tags`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tags })
+            });
+            this._renderG3DTags(tags);
+        } catch (e) {
+            /* ignore */
+        }
+    }
+
+    _renderG3DReadme(readme) {
+        const area = document.getElementById('g3dReadmeArea');
+        if (!area) return;
+        if (readme) {
+            area.innerHTML = `
+                <div class="g3d-readme-content" id="g3dReadmeContent">${this._parseMarkdown(readme)}</div>
+                <div class="g3d-readme-edit" style="display:none;" id="g3dReadmeEdit">
+                    <textarea class="form-control" id="g3dReadmeTextarea" rows="10" style="width:100%;">${this._escapeHtml(readme)}</textarea>
+                    <div style="margin-top:8px;display:flex;gap:6px;">
+                        <button class="btn btn-primary btn-sm" onclick="manager._g3dSaveReadme()">保存</button>
+                        <button class="btn btn-outline btn-sm" onclick="manager._g3dCancelReadme()">取消</button>
+                    </div>
+                </div>
+            `;
+        } else {
+            area.innerHTML = `
+                <div class="g3d-readme-empty">
+                    <p>暂无 README 说明</p>
+                    <p style="font-size:11px;">添加 README 来介绍你的项目</p>
+                    <button class="btn btn-outline btn-sm" onclick="manager._g3dEditReadme()">添加 README</button>
+                </div>
+                <div class="g3d-readme-edit" style="display:none;" id="g3dReadmeEdit">
+                    <textarea class="form-control" id="g3dReadmeTextarea" rows="10" style="width:100%;" placeholder="用 Markdown 编写项目说明..."></textarea>
+                    <div style="margin-top:8px;display:flex;gap:6px;">
+                        <button class="btn btn-primary btn-sm" onclick="manager._g3dSaveReadme()">保存</button>
+                        <button class="btn btn-outline btn-sm" onclick="manager._g3dCancelReadme()">取消</button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    _g3dEditReadme() {
+        const content = document.getElementById('g3dReadmeContent');
+        const edit = document.getElementById('g3dReadmeEdit');
+        const empty = document.querySelector('.g3d-readme-empty');
+        if (content) content.style.display = 'none';
+        if (empty) empty.style.display = 'none';
+        if (edit) edit.style.display = 'block';
+    }
+
+    _g3dCancelReadme() {
+        const content = document.getElementById('g3dReadmeContent');
+        const edit = document.getElementById('g3dReadmeEdit');
+        const empty = document.querySelector('.g3d-readme-empty');
+        if (edit) edit.style.display = 'none';
+        if (content) content.style.display = 'block';
+        if (empty) empty.style.display = '';
+    }
+
+    async _g3dSaveReadme() {
+        const textarea = document.getElementById('g3dReadmeTextarea');
+        if (!textarea) return;
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/readme`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ readme: textarea.value })
+            });
+            const data = await res.json();
+            if (data.success) {
+                this.showToast('README 已保存', 'success');
+                this._renderG3DReadme(textarea.value);
+            } else {
+                this.showToast(data.message || '保存失败', 'error');
+            }
+        } catch (e) {
+            this.showToast('保存失败', 'error');
+        }
+    }
+
+    _renderG3DAssembly(assembly) {
+        const area = document.getElementById('g3dAssemblyArea');
+        if (!area) return;
+        if (assembly && assembly.assembly_name) {
+            area.innerHTML = `
+                <div class="g3d-assembly-info" id="g3dAssemblyInfo">
+                    <h4>${this._escapeHtml(assembly.assembly_name)}</h4>
+                    <div class="assembly-meta">
+                        <span>零件数: ${assembly.part_count || (assembly.parts ? assembly.parts.length : 0)}</span>
+                        ${assembly.updated_at ? `<span>更新于: ${this._formatDate(assembly.updated_at)}</span>` : ''}
+                    </div>
+                    ${(assembly.parts && assembly.parts.length) ? `<div class="assembly-parts">${assembly.parts.map(p => `<span class="assembly-part-tag">${this._escapeHtml(p)}</span>`).join('')}</div>` : ''}
+                    ${assembly.notes ? `<div class="assembly-notes">${this._escapeHtml(assembly.notes)}</div>` : ''}
+                    <div class="assembly-actions">
+                        <button class="btn btn-outline btn-sm" onclick="manager._g3dEditAssembly()">编辑装配体</button>
+                    </div>
+                </div>
+                <div class="g3d-assembly-edit" style="display:none;" id="g3dAssemblyEdit">
+                    <div class="form-group">
+                        <label>装配体名称</label>
+                        <input type="text" class="form-control" id="g3dAssemblyName" value="${this._escapeHtml(assembly.assembly_name)}">
+                    </div>
+                    <div class="form-group">
+                        <label>零件列表 (每行一个)</label>
+                        <textarea class="form-control" id="g3dAssemblyParts" rows="4">${(assembly.parts || []).join('\n')}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>备注说明</label>
+                        <textarea class="form-control" id="g3dAssemblyNotes" rows="3">${this._escapeHtml(assembly.notes || '')}</textarea>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-primary btn-sm" onclick="manager._g3dSaveAssembly()">保存</button>
+                        <button class="btn btn-outline btn-sm" onclick="manager._g3dCancelAssembly()">取消</button>
+                    </div>
+                </div>
+            `;
+        } else {
+            area.innerHTML = `
+                <div class="g3d-assembly-empty" id="g3dAssemblyEmpty">
+                    <p>暂无装配体信息</p>
+                    <p style="font-size:11px;">添加装配体说明来记录零件组成</p>
+                    <button class="btn btn-outline btn-sm" onclick="manager._g3dEditAssembly()">添加装配体信息</button>
+                </div>
+                <div class="g3d-assembly-edit" style="display:none;" id="g3dAssemblyEdit">
+                    <div class="form-group">
+                        <label>装配体名称</label>
+                        <input type="text" class="form-control" id="g3dAssemblyName" placeholder="例如: 机器人底盘总成">
+                    </div>
+                    <div class="form-group">
+                        <label>零件列表 (每行一个)</label>
+                        <textarea class="form-control" id="g3dAssemblyParts" rows="4" placeholder="底盘底座.sldprt&#10;电机支架.sldprt"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>备注说明</label>
+                        <textarea class="form-control" id="g3dAssemblyNotes" rows="3"></textarea>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-primary btn-sm" onclick="manager._g3dSaveAssembly()">保存</button>
+                        <button class="btn btn-outline btn-sm" onclick="manager._g3dCancelAssembly()">取消</button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    _g3dEditAssembly() {
+        const info = document.getElementById('g3dAssemblyInfo');
+        const empty = document.getElementById('g3dAssemblyEmpty');
+        const edit = document.getElementById('g3dAssemblyEdit');
+        if (info) info.style.display = 'none';
+        if (empty) empty.style.display = 'none';
+        if (edit) edit.style.display = 'block';
+    }
+
+    _g3dCancelAssembly() {
+        const info = document.getElementById('g3dAssemblyInfo');
+        const empty = document.getElementById('g3dAssemblyEmpty');
+        const edit = document.getElementById('g3dAssemblyEdit');
+        if (edit) edit.style.display = 'none';
+        if (info) info.style.display = 'block';
+        if (empty) empty.style.display = '';
+    }
+
+    async _g3dSaveAssembly() {
+        const name = document.getElementById('g3dAssemblyName').value.trim();
+        const partsText = document.getElementById('g3dAssemblyParts').value.trim();
+        const notes = document.getElementById('g3dAssemblyNotes').value.trim();
+        const parts = partsText ? partsText.split('\n').map(s => s.trim()).filter(Boolean) : [];
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/assembly`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assembly_name: name, parts, notes, part_count: parts.length })
+            });
+            const data = await res.json();
+            if (data.success) {
+                this.showToast('装配体信息已保存', 'success');
+                this._renderG3DAssembly(data.assembly);
+            } else {
+                this.showToast(data.message || '保存失败', 'error');
+            }
+        } catch (e) {
+            this.showToast('保存失败', 'error');
+        }
+    }
+
+    _parseMarkdown(text) {
+        if (!text) return '';
+        let html = this._escapeHtml(text);
+        html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+        html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+        html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+        html = html.replace(/^---$/gm, '<hr>');
+        html = html.replace(/\n/g, '<br>');
+        return html;
     }
 
     _formatDate(iso) {

@@ -8,6 +8,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import hashlib
 from flask import Flask, render_template, request, jsonify, Response, send_file
 from flask_socketio import SocketIO
 
@@ -79,6 +80,48 @@ logging.getLogger("bambulabs_api").setLevel(logging.WARNING)
 
 app = Flask(__name__, template_folder="web/templates", static_folder="web/static")
 app.config["SECRET_KEY"] = "xploreprint-11019-secret"
+
+# 管理员密钥 — 仅存储加盐哈希值，源码泄露也无法还原明文
+_ADMIN_SALT = "XplorePrint_G3D_2026_SecureSalt"
+_ADMIN_KEY_HASH = "4e6ad988666ef7f883ad5e4abc928b0a01b0eebfedb3b07453572574a22e1d27"
+
+def _hash_admin_key(key: str) -> str:
+    return hashlib.sha256((key + _ADMIN_SALT).encode()).hexdigest()
+
+def verify_admin_key(key: str) -> bool:
+    return _hash_admin_key(key) == _ADMIN_KEY_HASH
+
+@app.cli.command("set-admin-key")
+def set_admin_key():
+    """设置或修改管理员密钥 — 用法: flask set-admin-key"""
+    import getpass
+    print("=" * 50)
+    print("  设置 G3D 管理员密钥")
+    print("=" * 50)
+    key = getpass.getpass("请输入新密钥: ")
+    if not key.strip():
+        print("❌ 密钥不能为空")
+        return
+    confirm = getpass.getpass("请再次输入新密钥: ")
+    if key != confirm:
+        print("❌ 两次输入不一致")
+        return
+    new_hash = _hash_admin_key(key)
+    app_path = os.path.abspath(__file__)
+    with open(app_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    old = '_ADMIN_KEY_HASH = "' + _ADMIN_KEY_HASH + '"'
+    new = '_ADMIN_KEY_HASH = "' + new_hash + '"'
+    if old not in content:
+        print("❌ 无法找到哈希值配置行，请手动修改 _ADMIN_KEY_HASH")
+        print(f"   新哈希值: {new_hash}")
+        return
+    content = content.replace(old, new)
+    with open(app_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    print(f"✅ 管理员密钥已更新")
+    print(f"   新哈希值: {new_hash}")
+
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data", "storage")
@@ -947,6 +990,9 @@ def g3d_update_project(project_id):
 
 @app.route("/api/g3d/projects/<project_id>", methods=["DELETE"])
 def g3d_delete_project(project_id):
+    data = request.json or {}
+    if not verify_admin_key(data.get("admin_key", "")):
+        return jsonify({"success": False, "message": "管理员密钥错误"}), 403
     ok = g3d_manager.delete_project(project_id)
     if not ok:
         return jsonify({"success": False, "message": "项目不存在"}), 404
@@ -984,6 +1030,9 @@ def g3d_create_commit(project_id):
 
 @app.route("/api/g3d/projects/<project_id>/commits/<commit_id>", methods=["DELETE"])
 def g3d_delete_commit(project_id, commit_id):
+    data = request.json or {}
+    if not verify_admin_key(data.get("admin_key", "")):
+        return jsonify({"success": False, "message": "管理员密钥错误"}), 403
     result = g3d_manager.delete_commit(project_id, commit_id)
     return jsonify(result)
 
@@ -1015,6 +1064,52 @@ def g3d_clear_staging(project_id):
 @app.route("/api/g3d/projects/<project_id>/staging/<path:filename>", methods=["DELETE"])
 def g3d_remove_staging_file(project_id, filename):
     return jsonify(g3d_manager.remove_staging_file(project_id, filename))
+
+
+@app.route("/api/g3d/projects/<project_id>/files/<path:filename>", methods=["DELETE"])
+def g3d_delete_file(project_id, filename):
+    data = request.json or {}
+    if not verify_admin_key(data.get("admin_key", "")):
+        return jsonify({"success": False, "message": "管理员密钥错误"}), 403
+    return jsonify(g3d_manager.delete_file(project_id, filename))
+
+
+@app.route("/api/g3d/projects/<project_id>/readme", methods=["PUT"])
+def g3d_update_readme(project_id):
+    data = request.json
+    if data is None:
+        return jsonify({"success": False, "message": "请求体为空"}), 400
+    return jsonify(g3d_manager.update_readme(project_id, data.get("readme", "")))
+
+
+@app.route("/api/g3d/projects/<project_id>/visibility", methods=["PUT"])
+def g3d_update_visibility(project_id):
+    data = request.json
+    if not data or not data.get("visibility"):
+        return jsonify({"success": False, "message": "visibility 不能为空"}), 400
+    return jsonify(g3d_manager.update_visibility(project_id, data["visibility"]))
+
+
+@app.route("/api/g3d/projects/<project_id>/tags", methods=["PUT"])
+def g3d_update_tags(project_id):
+    data = request.json
+    if not data or "tags" not in data:
+        return jsonify({"success": False, "message": "tags 不能为空"}), 400
+    return jsonify(g3d_manager.update_tags(project_id, data["tags"]))
+
+
+@app.route("/api/g3d/projects/<project_id>/assembly", methods=["GET"])
+def g3d_get_assembly(project_id):
+    info = g3d_manager._get_assembly_info(project_id)
+    return jsonify(info or {})
+
+
+@app.route("/api/g3d/projects/<project_id>/assembly", methods=["PUT"])
+def g3d_update_assembly(project_id):
+    data = request.json
+    if not data:
+        return jsonify({"success": False, "message": "请求体为空"}), 400
+    return jsonify(g3d_manager.update_assembly_info(project_id, data))
 
 
 @socketio.on("connect")

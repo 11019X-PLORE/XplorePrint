@@ -237,6 +237,9 @@ class G3DProject:
     default_branch: str = "main"
     file_count: int = 0
     commit_count: int = 0
+    visibility: str = "public"
+    tags: list = None
+    readme: str = ""
 
 
 @dataclass
@@ -247,3 +250,11 @@ class G3DCommit:
     author: str = ""
     timestamp: str = ""
     file_count: int = 0
+
+
+@dataclass
+class G3DAssemblyInfo:
+    assembly_name: str = ""
+    part_count: int = 0
+    parts: list = None
+    notes: str = ""

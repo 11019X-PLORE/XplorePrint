@@ -11,7 +11,7 @@ import shutil
 import logging
 from datetime import datetime
 
-from printermanager.models import G3DProject, G3DCommit
+from printermanager.models import G3DProject, G3DCommit, G3DAssemblyInfo
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,9 @@ class G3DManager:
                 "created_at": p.created_at, "updated_at": p.updated_at,
                 "default_branch": p.default_branch,
                 "file_count": p.file_count, "commit_count": p.commit_count,
+                "visibility": getattr(p, "visibility", "public"),
+                "tags": getattr(p, "tags", None) or [],
+                "readme": getattr(p, "readme", ""),
             } for p in self._projects], f, indent=2, ensure_ascii=False)
 
     def _project_dir(self, project_id: str) -> str:
@@ -85,6 +88,9 @@ class G3DManager:
                 "created_at": p.created_at, "updated_at": p.updated_at,
                 "default_branch": p.default_branch,
                 "file_count": p.file_count, "commit_count": p.commit_count,
+                "visibility": getattr(p, "visibility", "public"),
+                "tags": getattr(p, "tags", None) or [],
+                "readme": getattr(p, "readme", ""),
             })
         return result
 
@@ -94,13 +100,18 @@ class G3DManager:
                 self._update_project_stats(p)
                 commits = self._load_commits(project_id)
                 files = self._get_latest_files(project_id)
+                assembly = self._get_assembly_info(project_id)
                 return {
                     "id": p.id, "name": p.name, "description": p.description,
                     "created_at": p.created_at, "updated_at": p.updated_at,
                     "default_branch": p.default_branch,
                     "file_count": p.file_count, "commit_count": p.commit_count,
+                    "visibility": getattr(p, "visibility", "public"),
+                    "tags": getattr(p, "tags", None) or [],
+                    "readme": getattr(p, "readme", ""),
                     "commits": commits,
                     "files": files,
+                    "assembly": assembly,
                 }
         return None
 
@@ -307,6 +318,80 @@ class G3DManager:
             os.remove(fpath)
             return {"success": True, "message": f"已移除暂存文件: {filename}"}
         return {"success": False, "message": "暂存文件不存在"}
+
+    def delete_file(self, project_id: str, filename: str) -> dict:
+        project = next((p for p in self._projects if p.id == project_id), None)
+        if not project:
+            return {"success": False, "message": "项目不存在"}
+        fpath = os.path.join(self._project_dir(project_id), "latest", os.path.basename(filename))
+        if not os.path.exists(fpath):
+            return {"success": False, "message": "文件不存在"}
+        os.remove(fpath)
+        project.updated_at = datetime.now().isoformat()
+        self._update_project_stats(project)
+        self._save_projects()
+        logger.info(f"G3D file deleted from {project.name}: {filename}")
+        return {"success": True, "message": f"文件已删除: {filename}"}
+
+    def update_readme(self, project_id: str, readme: str) -> dict:
+        for p in self._projects:
+            if p.id == project_id:
+                p.readme = readme
+                p.updated_at = datetime.now().isoformat()
+                self._save_projects()
+                return {"success": True, "message": "README 已更新"}
+        return {"success": False, "message": "项目不存在"}
+
+    def update_visibility(self, project_id: str, visibility: str) -> dict:
+        if visibility not in ("public", "private"):
+            return {"success": False, "message": "visibility 必须为 public 或 private"}
+        for p in self._projects:
+            if p.id == project_id:
+                p.visibility = visibility
+                p.updated_at = datetime.now().isoformat()
+                self._save_projects()
+                return {"success": True, "message": f"可见性已更新为 {visibility}"}
+        return {"success": False, "message": "项目不存在"}
+
+    def update_tags(self, project_id: str, tags: list) -> dict:
+        for p in self._projects:
+            if p.id == project_id:
+                p.tags = tags
+                p.updated_at = datetime.now().isoformat()
+                self._save_projects()
+                return {"success": True, "message": "标签已更新"}
+        return {"success": False, "message": "项目不存在"}
+
+    def _get_assembly_info(self, project_id: str) -> dict | None:
+        assembly_file = os.path.join(self._project_dir(project_id), "assembly.json")
+        if os.path.exists(assembly_file):
+            try:
+                with open(assembly_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return None
+
+    def update_assembly_info(self, project_id: str, data: dict) -> dict:
+        project = next((p for p in self._projects if p.id == project_id), None)
+        if not project:
+            return {"success": False, "message": "项目不存在"}
+        assembly_file = os.path.join(self._project_dir(project_id), "assembly.json")
+        os.makedirs(self._project_dir(project_id), exist_ok=True)
+        existing = {}
+        if os.path.exists(assembly_file):
+            try:
+                with open(assembly_file, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            except Exception:
+                pass
+        existing.update(data)
+        existing["updated_at"] = datetime.now().isoformat()
+        with open(assembly_file, "w", encoding="utf-8") as f:
+            json.dump(existing, f, indent=2, ensure_ascii=False)
+        project.updated_at = datetime.now().isoformat()
+        self._save_projects()
+        return {"success": True, "assembly": existing, "message": "装配体信息已更新"}
 
 
 g3d_manager = G3DManager()
