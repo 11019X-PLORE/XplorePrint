@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * XplorePrint - Main Application JavaScript
  * FRC Team 11019 Xplore
  * 3D Printer Management Software
@@ -58,6 +58,7 @@ class PrinterApp {
         if (view === 'printers') {
             this.renderPrinterList();
         } else if (view === 'queue') {
+            this.loadWeightsToUI();
             this.loadQueue();
         } else if (view === 'filaments') {
             this.loadFilaments();
@@ -81,6 +82,8 @@ class PrinterApp {
             this.loadExportPathSetting();
         } else if (view === 'toolbox') {
             this.renderToolbox();
+        } else if (view === 'g3d') {
+            this.loadG3DProjects();
         }
     }
 
@@ -780,7 +783,13 @@ class PrinterApp {
         btn.disabled = true;
         btn.textContent = '计算中...';
         try {
-            const res = await fetch('/api/schedule/preview');
+            const weights = this._getScheduleWeights();
+            const params = new URLSearchParams();
+            Object.entries(weights).forEach(([k, v]) => {
+                if (v > 0) params.set(k, v);
+            });
+            const url = '/api/schedule/preview' + (params.toString() ? '?' + params.toString() : '');
+            const res = await fetch(url);
             const data = await res.json();
             this._scheduleData = data;
             badge.textContent = `${data.total_jobs} 个任务`;
@@ -805,6 +814,7 @@ class PrinterApp {
                         const timeStr = this.formatTime(item.estimated_time * 60);
                         const scoreColor = item.score_total >= 70 ? 'var(--green)' :
                             item.score_total >= 40 ? 'var(--yellow)' : 'var(--red)';
+                        const scoreLabels = data.dimensions || [];
                         html += `
                             <div class="schedule-item ${i === 0 ? 'schedule-item-next' : ''}">
                                 <div class="schedule-item-rank">${i + 1}</div>
@@ -826,6 +836,8 @@ class PrinterApp {
                                     <span title="时长">T:${item.score_time}</span>
                                     <span title="打印机">M:${item.score_printer}</span>
                                     <span title="子系统">S:${item.score_subsystem}</span>
+                                    ${item.score_robot != null ? `<span title="机器人">R:${item.score_robot}</span>` : ''}
+                                    ${item.score_assigned != null ? `<span title="队员">A:${item.score_assigned}</span>` : ''}
                                 </div>
                             </div>
                         `;
@@ -834,10 +846,13 @@ class PrinterApp {
                 });
                 html += '</div>';
 
+                const dimLabels = data.dimensions
+                    ? data.dimensions.map(d => `${d.label}×${d.weight}%`).join(' + ')
+                    : 'P×40% + T×25% + M×20% + S×15%';
                 html += `
                     <div class="schedule-legend">
-                        <span>排分 = P×40% + T×25% + M×20% + S×15%</span>
-                        <span>P=优先级 T=时长 M=打印机状态 S=子系统连续性</span>
+                        <span>排分 = ${dimLabels}</span>
+                        <span>P=优先级 T=时长 M=打印机状态 S=子系统连续 R=机器人 A=队员</span>
                     </div>
                 `;
             } else {
@@ -858,7 +873,12 @@ class PrinterApp {
         btn.disabled = true;
         btn.textContent = '应用中...';
         try {
-            const res = await fetch('/api/schedule/apply', { method: 'POST' });
+            const weights = this._getScheduleWeights();
+            const res = await fetch('/api/schedule/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ weights }),
+            });
             const data = await res.json();
             if (data.status === 'ok') {
                 this.queue = data.queue;
@@ -870,6 +890,102 @@ class PrinterApp {
         }
         btn.disabled = false;
         btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>应用排序`;
+    }
+
+    // ==================== 智能调度权重配置 ====================
+
+    _getDefaultWeights() {
+        return {
+            priority: 40,
+            time: 25,
+            printer: 20,
+            subsystem: 15,
+            robot: 0,
+            assigned: 0,
+        };
+    }
+
+    _getScheduleWeights() {
+        try {
+            const saved = localStorage.getItem('xploreprint_schedule_weights');
+            if (saved) {
+                return JSON.parse(saved);
+            }
+        } catch (e) { /* ignore */ }
+        return this._getDefaultWeights();
+    }
+
+    loadWeightsToUI() {
+        this._restoreWeightsCollapse();
+        const weights = this._getScheduleWeights();
+        document.getElementById('weightPriority').value = weights.priority || 0;
+        document.getElementById('weightTime').value = weights.time || 0;
+        document.getElementById('weightPrinter').value = weights.printer || 0;
+        document.getElementById('weightSubsystem').value = weights.subsystem || 0;
+        document.getElementById('weightRobot').value = weights.robot || 0;
+        document.getElementById('weightAssigned').value = weights.assigned || 0;
+        this.updateWeightLabels();
+    }
+
+    updateWeightLabels() {
+        const get = (id) => parseInt(document.getElementById(id).value || 0);
+        document.getElementById('weightPriorityValue').textContent = get('weightPriority') + '%';
+        document.getElementById('weightTimeValue').textContent = get('weightTime') + '%';
+        document.getElementById('weightPrinterValue').textContent = get('weightPrinter') + '%';
+        document.getElementById('weightSubsystemValue').textContent = get('weightSubsystem') + '%';
+        document.getElementById('weightRobotValue').textContent = get('weightRobot') + '%';
+        document.getElementById('weightAssignedValue').textContent = get('weightAssigned') + '%';
+        const total = get('weightPriority') + get('weightTime') + get('weightPrinter') + get('weightSubsystem') + get('weightRobot') + get('weightAssigned');
+        document.getElementById('weightTotal').textContent = total;
+    }
+
+    resetWeights() {
+        const def = this._getDefaultWeights();
+        document.getElementById('weightPriority').value = def.priority;
+        document.getElementById('weightTime').value = def.time;
+        document.getElementById('weightPrinter').value = def.printer;
+        document.getElementById('weightSubsystem').value = def.subsystem;
+        document.getElementById('weightRobot').value = def.robot;
+        document.getElementById('weightAssigned').value = def.assigned;
+        this.updateWeightLabels();
+        this.showToast('已重置为默认权重', 'info');
+    }
+
+    saveWeights() {
+        const get = (id) => parseInt(document.getElementById(id).value || 0);
+        const weights = {
+            priority: get('weightPriority'),
+            time: get('weightTime'),
+            printer: get('weightPrinter'),
+            subsystem: get('weightSubsystem'),
+            robot: get('weightRobot'),
+            assigned: get('weightAssigned'),
+        };
+        try {
+            localStorage.setItem('xploreprint_schedule_weights', JSON.stringify(weights));
+            this.showToast('权重配置已保存', 'success');
+        } catch (e) {
+            this.showToast('保存失败', 'error');
+        }
+    }
+
+    toggleWeights() {
+        const panel = document.getElementById('scheduleWeights');
+        if (!panel) return;
+        const collapsed = panel.classList.toggle('collapsed');
+        try {
+            localStorage.setItem('xploreprint_weights_collapsed', collapsed ? '1' : '0');
+        } catch (e) { /* ignore */ }
+    }
+
+    _restoreWeightsCollapse() {
+        try {
+            const val = localStorage.getItem('xploreprint_weights_collapsed');
+            const panel = document.getElementById('scheduleWeights');
+            if (panel && val === '1') {
+                panel.classList.add('collapsed');
+            }
+        } catch (e) { /* ignore */ }
     }
 
     async startScheduledJobs() {
@@ -3575,6 +3691,293 @@ ${printer.ams_units && printer.ams_units.length > 0 ? `
             this.showToast('导出路径已保存', 'success');
         } catch (e) {
             this.showToast('保存失败', 'error');
+        }
+    }
+
+    // ==================== G3D - Git for 3D Prints ====================
+
+    _g3dProjectId = null;
+
+    async loadG3DProjects() {
+        const list = document.getElementById('g3dProjectList');
+        list.innerHTML = '<div class="empty-state"><div class="loading-spinner"><div class="spinner-dot"></div><div class="spinner-dot"></div><div class="spinner-dot"></div></div><p>加载中...</p></div>';
+        try {
+            const res = await fetch('/api/g3d/projects');
+            const projects = await res.json();
+            if (!projects.length) {
+                list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg><p>暂无项目</p><span>创建第一个项目来管理你的3D打印和CAD文件</span></div>';
+                return;
+            }
+            list.innerHTML = projects.map(p => `
+                <div class="g3d-project-card" onclick="manager.g3dOpenProject('${p.id}')">
+                    <div class="g3d-project-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                    </div>
+                    <div class="g3d-project-info">
+                        <div class="g3d-project-name">${this._escapeHtml(p.name)}</div>
+                        <div class="g3d-project-desc">${this._escapeHtml(p.description || '暂无描述')}</div>
+                    </div>
+                    <div class="g3d-project-meta">
+                        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${p.file_count || 0}</span>
+                        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${p.commit_count || 0}</span>
+                    </div>
+                    <div class="g3d-project-date">${this._formatDate(p.updated_at)}</div>
+                </div>
+            `).join('');
+        } catch (e) {
+            list.innerHTML = '<div class="empty-state"><p>加载失败</p><span>请检查服务器连接</span></div>';
+        }
+    }
+
+    async g3dOpenProject(projectId) {
+        this._g3dProjectId = projectId;
+        document.getElementById('g3dContent').style.display = 'none';
+        document.getElementById('g3dDetail').style.display = 'block';
+        try {
+            const res = await fetch(`/api/g3d/projects/${projectId}`);
+            const project = await res.json();
+            document.getElementById('g3dDetailName').textContent = project.name;
+            document.getElementById('g3dDetailDesc').textContent = project.description || '';
+            this._renderG3DFiles(project.files || []);
+            this._renderG3DCommits(project.commits || []);
+            this._renderG3DStaging();
+        } catch (e) {
+            this.showToast('加载项目失败', 'error');
+        }
+    }
+
+    g3dBackToList() {
+        this._g3dProjectId = null;
+        document.getElementById('g3dContent').style.display = 'block';
+        document.getElementById('g3dDetail').style.display = 'none';
+        this.loadG3DProjects();
+    }
+
+    showG3DCreateProject() {
+        const name = prompt('请输入项目名称：');
+        if (!name || !name.trim()) return;
+        const desc = prompt('请输入项目描述（可选）：') || '';
+        this._g3dCreateProject(name.trim(), desc.trim());
+    }
+
+    async _g3dCreateProject(name, description) {
+        try {
+            const res = await fetch('/api/g3d/projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, description }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                this.showToast('项目创建成功', 'success');
+                this.loadG3DProjects();
+            } else {
+                this.showToast(data.message || '创建失败', 'error');
+            }
+        } catch (e) {
+            this.showToast('创建失败', 'error');
+        }
+    }
+
+    async g3dDeleteCurrentProject() {
+        if (!this._g3dProjectId) return;
+        if (!confirm('确定要删除此项目吗？所有文件和提交历史将被永久删除。')) return;
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                this.showToast('项目已删除', 'success');
+                this.g3dBackToList();
+            } else {
+                this.showToast(data.message || '删除失败', 'error');
+            }
+        } catch (e) {
+            this.showToast('删除失败', 'error');
+        }
+    }
+
+    g3dTriggerUpload() {
+        document.getElementById('g3dFileInput').click();
+    }
+
+    async g3dHandleFileUpload(event) {
+        const files = event.target.files;
+        if (!files.length) return;
+        for (const file of files) {
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/upload`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    this.showToast(`上传 ${file.name} 失败: ${data.message}`, 'error');
+                }
+            } catch (e) {
+                this.showToast(`上传 ${file.name} 失败`, 'error');
+            }
+        }
+        event.target.value = '';
+        this._renderG3DStaging();
+    }
+
+    async _renderG3DStaging() {
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/staging`);
+            const files = await res.json();
+            const container = document.getElementById('g3dStagingFiles');
+            const actions = document.getElementById('g3dStagingActions');
+            if (!files.length) {
+                container.innerHTML = '';
+                actions.style.display = 'none';
+                return;
+            }
+            actions.style.display = 'flex';
+            container.innerHTML = files.map(f => `
+                <div class="g3d-staging-file">
+                    <span class="file-name">${this._escapeHtml(f.name)}</span>
+                    <span class="file-size">${f.size_kb} KB</span>
+                    <span class="file-remove" onclick="event.stopPropagation();manager._g3dRemoveStagingFile('${f.name}')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </span>
+                </div>
+            `).join('');
+        } catch (e) {
+            /* ignore */
+        }
+    }
+
+    async _g3dRemoveStagingFile(filename) {
+        try {
+            await fetch(`/api/g3d/projects/${this._g3dProjectId}/staging/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            this._renderG3DStaging();
+        } catch (e) {
+            /* ignore */
+        }
+    }
+
+    async g3dClearStaging() {
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/staging`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                this.showToast(`已清除 ${data.cleared} 个暂存文件`, 'info');
+                this._renderG3DStaging();
+            }
+        } catch (e) {
+            this.showToast('清除失败', 'error');
+        }
+    }
+
+    async g3dCommit() {
+        const message = document.getElementById('g3dCommitMessage').value.trim();
+        if (!message) {
+            this.showToast('请输入提交信息', 'warning');
+            return;
+        }
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/commits`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                this.showToast('提交成功', 'success');
+                document.getElementById('g3dCommitMessage').value = '';
+                this._renderG3DStaging();
+                this.g3dOpenProject(this._g3dProjectId);
+            } else {
+                this.showToast(data.message || '提交失败', 'error');
+            }
+        } catch (e) {
+            this.showToast('提交失败', 'error');
+        }
+    }
+
+    _renderG3DFiles(files) {
+        const list = document.getElementById('g3dFileList');
+        if (!files.length) {
+            list.innerHTML = '<div class="empty-state" style="padding:20px;"><span style="font-size:12px;">暂无文件，请在暂存区上传并提交</span></div>';
+            return;
+        }
+        list.innerHTML = files.map(f => {
+            const ext = (f.ext || '').replace('.', '');
+            return `
+                <div class="g3d-file-item">
+                    <div class="g3d-file-icon ${ext}">${ext.toUpperCase().substring(0, 3)}</div>
+                    <div class="g3d-file-info">
+                        <div class="g3d-file-name">${this._escapeHtml(f.name)}</div>
+                        <div class="g3d-file-meta">${f.size_kb} KB</div>
+                    </div>
+                    <a class="g3d-file-download" href="/api/g3d/projects/${this._g3dProjectId}/download/${encodeURIComponent(f.name)}" title="下载">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </a>
+                </div>
+            `;
+        }).join('');
+    }
+
+    _renderG3DCommits(commits) {
+        const list = document.getElementById('g3dCommitList');
+        if (!commits.length) {
+            list.innerHTML = '<div class="empty-state" style="padding:20px;"><span style="font-size:12px;">暂无提交历史</span></div>';
+            return;
+        }
+        list.innerHTML = commits.map(c => `
+            <div class="g3d-commit-item">
+                <div class="g3d-commit-dot"></div>
+                <div class="g3d-commit-body">
+                    <div class="g3d-commit-message">${this._escapeHtml(c.message)}</div>
+                    <div class="g3d-commit-meta">
+                        <span class="g3d-commit-id" title="${c.id}">${c.id}</span>
+                        <span>${this._formatDate(c.timestamp)}</span>
+                        <span>${c.file_count || 0} 个文件</span>
+                    </div>
+                    ${c.files && c.files.length ? `
+                    <div class="g3d-commit-files">
+                        ${c.files.map(fn => `<span class="g3d-commit-file-tag" onclick="event.stopPropagation();window.open('/api/g3d/projects/${this._g3dProjectId}/download/${encodeURIComponent(fn)}?commit_id=${c.id}')">${this._escapeHtml(fn)}</span>`).join('')}
+                    </div>
+                    ` : ''}
+                    <div class="g3d-commit-actions">
+                        <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();manager._g3dDeleteCommit('${c.id}')">删除</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async _g3dDeleteCommit(commitId) {
+        if (!confirm('确定要删除此提交吗？')) return;
+        try {
+            const res = await fetch(`/api/g3d/projects/${this._g3dProjectId}/commits/${commitId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                this.showToast('提交已删除', 'success');
+                this.g3dOpenProject(this._g3dProjectId);
+            } else {
+                this.showToast(data.message || '删除失败', 'error');
+            }
+        } catch (e) {
+            this.showToast('删除失败', 'error');
+        }
+    }
+
+    _formatDate(iso) {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            const now = new Date();
+            const diff = now - d;
+            if (diff < 60000) return '刚刚';
+            if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+            if (diff < 604800000) return Math.floor(diff / 86400000) + ' 天前';
+            return d.toLocaleDateString('zh-CN');
+        } catch (e) {
+            return iso;
         }
     }
 }

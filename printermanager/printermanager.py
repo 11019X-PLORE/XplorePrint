@@ -637,77 +637,143 @@ class PrinterManager:
         self._notify()
         return self.get_queue()
 
-    def calculate_scores(self) -> list[dict]:
-        """Calculate intelligent scheduling scores for all queue items.
+    def calculate_scores(self, weights: dict = None) -> list[dict]:
+        """Calculate intelligent scheduling scores for all queue items with custom weights.
 
-        Scoring dimensions (weighted):
-          - Priority (40%):  priority * 10 → 0..100
-          - Time Efficiency (25%):  shorter print → higher score
-          - Printer Availability (20%):  idle printer → bonus
-          - Subsystem Continuity (15%):  same subsystem → batch bonus
+        Args:
+            weights: dict with keys: priority, time, printer, subsystem, robot, assigned
+                each value is percentage weight (0-100), sum should be ~100.
+
+        Scoring dimensions:
+          - Priority:  priority * 10 → 0..100 (higher priority → higher score)
+          - Time Efficiency:  shorter print → higher score (0..100)
+          - Printer Availability:  idle printer → higher score (0..100)
+          - Subsystem Continuity:  same subsystem as current print → bonus (0..100)
+          - Robot Priority:  if matches printer's current robot → bonus (0..100)
+          - Assigned to Same Person:  same assigned person → bonus (0..100)
 
         Returns a list of scored items with breakdown.
         """
+        default_weights = {
+            'priority': 40,
+            'time': 25,
+            'printer': 20,
+            'subsystem': 15,
+            'robot': 0,
+            'assigned': 0,
+        }
+        if not weights:
+            weights = default_weights
+        else:
+            for k in default_weights:
+                weights.setdefault(k, default_weights[k])
+
         waiting = [q for q in self._queue if q.status == QueueStatus.WAITING]
         if not waiting:
             return []
 
         max_time = max((q.estimated_time for q in waiting), default=1) or 1
         results = []
+        dimensions = []
+
+        if weights.get('priority', 0) > 0:
+            dimensions.append({'key': 'priority', 'label': '优先级', 'weight': weights['priority']})
+        if weights.get('time', 0) > 0:
+            dimensions.append({'key': 'time', 'label': '时长', 'weight': weights['time']})
+        if weights.get('printer', 0) > 0:
+            dimensions.append({'key': 'printer', 'label': '打印机', 'weight': weights['printer']})
+        if weights.get('subsystem', 0) > 0:
+            dimensions.append({'key': 'subsystem', 'label': '子系统', 'weight': weights['subsystem']})
+        if weights.get('robot', 0) > 0:
+            dimensions.append({'key': 'robot', 'label': '机器人', 'weight': weights['robot']})
+        if weights.get('assigned', 0) > 0:
+            dimensions.append({'key': 'assigned', 'label': '队员', 'weight': weights['assigned']})
+
+        total_weight = sum(w['weight'] for w in dimensions) or 100
 
         for item in waiting:
             printer = self._printers.get(item.printer_id)
-            priority_score = min(item.priority * 10, 100)
+            scores = {}
 
-            time_score = 100 * max(0, 1 - item.estimated_time / max(2 * max_time, 1))
-            time_score = round(time_score, 1)
+            # Priority score: priority * 10 → 0..100
+            scores['priority'] = min(item.priority * 10, 100)
 
-            printer_score = 0
+            # Time score: shorter print → higher score → 0..100
+            scores['time'] = 100 * max(0, 1 - item.estimated_time / max(2 * max_time, 1))
+            scores['time'] = round(scores['time'], 1)
+
+            # Printer status score
+            scores['printer'] = 0
             if printer:
                 if printer.status == PrinterStatus.IDLE:
-                    printer_score = 100
+                    scores['printer'] = 100
                 elif printer.status == PrinterStatus.PRINTING:
                     remaining = printer.print_time_remaining
                     if remaining > 0 and remaining < 1800:
-                        printer_score = 60
+                        scores['printer'] = 60
                     elif remaining >= 1800:
-                        printer_score = 20
+                        scores['printer'] = 20
                     else:
-                        printer_score = 30
+                        scores['printer'] = 30
                 elif printer.status == PrinterStatus.PAUSED:
-                    printer_score = 10
+                    scores['printer'] = 10
                 elif printer.status == PrinterStatus.FINISHING:
-                    printer_score = 80
+                    scores['printer'] = 80
                 elif printer.status == PrinterStatus.ERROR:
-                    printer_score = 5
+                    scores['printer'] = 5
                 elif printer.status == PrinterStatus.ONLINE:
-                    printer_score = 50
+                    scores['printer'] = 50
                 else:
-                    printer_score = 0
+                    scores['printer'] = 0
 
-            subsystem_score = 0
-            if printer and printer.current_file and item.subsystem:
+            # Subsystem continuity score
+            scores['subsystem'] = 0
+            if printer and printer.current_file and item.subsystem and weights.get('subsystem', 0) > 0:
                 printing_items = [
                     q for q in self._queue
                     if q.printer_id == item.printer_id and q.status == QueueStatus.PRINTING
                 ]
                 for pi in printing_items:
                     if getattr(pi, 'subsystem', '') == item.subsystem:
-                        subsystem_score = 100
+                        scores['subsystem'] = 100
                         break
 
-            total = round(
-                priority_score * 0.4 +
-                time_score * 0.25 +
-                printer_score * 0.2 +
-                subsystem_score * 0.15,
-                1
-            )
+            # Robot priority score
+            scores['robot'] = 0
+            if printer and item.robot_id and weights.get('robot', 0) > 0:
+                # Check if this printer already has a printing job from the same robot
+                printing_items = [
+                    q for q in self._queue
+                    if q.printer_id == item.printer_id and q.status == QueueStatus.PRINTING
+                ]
+                for pi in printing_items:
+                    if getattr(pi, 'robot_id', '') == item.robot_id:
+                        scores['robot'] = 100
+                        break
+
+            # Assigned to same person score
+            scores['assigned'] = 0
+            if printer and item.assigned_to and weights.get('assigned', 0) > 0:
+                printing_items = [
+                    q for q in self._queue
+                    if q.printer_id == item.printer_id and q.status == QueueStatus.PRINTING
+                ]
+                for pi in printing_items:
+                    if getattr(pi, 'assigned_to', '') == item.assigned_to:
+                        scores['assigned'] = 100
+                        break
+
+            # Total weighted score (normalize to 0..100)
+            total = 0.0
+            for dim in dimensions:
+                total += scores[dim['key']] * (dim['weight'] / 100.0)
+            # Normalize to 0..100 based on total weight
+            total = round(total * (100.0 / total_weight), 1)
 
             printer_name = printer.name if printer else "未知"
             printer_status = printer.status.value if printer else "offline"
 
-            results.append({
+            result_item = {
                 "id": item.id,
                 "printer_id": item.printer_id,
                 "printer_name": printer_name,
@@ -720,22 +786,32 @@ class PrinterManager:
                 "robot_id": getattr(item, 'robot_id', ''),
                 "assigned_to": getattr(item, 'assigned_to', ''),
                 "score_total": total,
-                "score_priority": priority_score,
-                "score_time": time_score,
-                "score_printer": printer_score,
-                "score_subsystem": subsystem_score,
-            })
+                "score_priority": scores['priority'],
+                "score_time": scores['time'],
+                "score_printer": scores['printer'],
+                "score_subsystem": scores['subsystem'],
+            }
+            if weights.get('robot', 0) > 0:
+                result_item['score_robot'] = scores['robot']
+            if weights.get('assigned', 0) > 0:
+                result_item['score_assigned'] = scores['assigned']
+
+            results.append(result_item)
 
         results.sort(key=lambda x: -x["score_total"])
-        return results
+        return results, dimensions
 
-    def auto_schedule_preview(self) -> dict:
+    def auto_schedule_preview(self, weights: dict = None) -> dict:
         """Preview the auto-scheduled queue with scores.
 
+        Args:
+            weights: dict with keys: priority, time, printer, subsystem, robot, assigned
+
         Returns:
-            dict with "scored_items" (sorted by score) and "plan" (per-printer plan).
+            dict with "scored_items" (sorted by score), "plan" (per-printer plan),
+            and "dimensions" (active scoring dimensions).
         """
-        scored = self.calculate_scores()
+        scored, dimensions = self.calculate_scores(weights)
 
         plan = {}
         for item in scored:
@@ -753,11 +829,16 @@ class PrinterManager:
             "scored_items": scored,
             "plan": list(plan.values()),
             "total_jobs": len(scored),
+            "dimensions": dimensions,
         }
 
-    def apply_auto_schedule(self) -> list[dict]:
-        """Apply the auto-scheduled order to the queue."""
-        scored = self.calculate_scores()
+    def apply_auto_schedule(self, weights: dict = None) -> list[dict]:
+        """Apply the auto-scheduled order to the queue.
+
+        Args:
+            weights: dict with keys: priority, time, printer, subsystem, robot, assigned
+        """
+        scored, _ = self.calculate_scores(weights)
         scored_ids = {item["id"] for item in scored}
         id_to_item = {q.id: q for q in self._queue}
 

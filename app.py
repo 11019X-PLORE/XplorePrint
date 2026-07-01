@@ -12,6 +12,7 @@ from flask import Flask, render_template, request, jsonify, Response, send_file
 from flask_socketio import SocketIO
 
 from printermanager.printermanager import PrinterManager
+from printermanager.g3d_manager import g3d_manager
 
 # ==================== 彩色日志配置 ====================
 
@@ -445,13 +446,20 @@ def reorder_queue():
 
 @app.route("/api/schedule/preview", methods=["GET"])
 def schedule_preview():
-    preview = manager.auto_schedule_preview()
+    weights = {}
+    for key in ('priority', 'time', 'printer', 'subsystem', 'robot', 'assigned'):
+        val = request.args.get(key, type=int)
+        if val is not None:
+            weights[key] = val
+    preview = manager.auto_schedule_preview(weights if weights else None)
     return jsonify(preview)
 
 
 @app.route("/api/schedule/apply", methods=["POST"])
 def schedule_apply():
-    queue = manager.apply_auto_schedule()
+    data = request.get_json(silent=True) or {}
+    weights = data.get('weights', None)
+    queue = manager.apply_auto_schedule(weights)
     return jsonify({"status": "ok", "queue": queue})
 
 
@@ -895,6 +903,118 @@ def competition_health_check():
         "total_printers": len(results),
         "healthy_printers": sum(1 for r in results if r["healthy"]),
     })
+
+
+# ==================== G3D - Git for 3D Prints API ====================
+
+@app.route("/api/g3d/projects", methods=["GET"])
+def g3d_list_projects():
+    return jsonify(g3d_manager.get_projects())
+
+
+@app.route("/api/g3d/projects", methods=["POST"])
+def g3d_create_project():
+    data = request.json
+    if not data or not data.get("name"):
+        return jsonify({"success": False, "message": "项目名称不能为空"}), 400
+    project = g3d_manager.create_project(
+        name=data["name"],
+        description=data.get("description", ""),
+    )
+    return jsonify({"success": True, "project": project})
+
+
+@app.route("/api/g3d/projects/<project_id>", methods=["GET"])
+def g3d_get_project(project_id):
+    project = g3d_manager.get_project(project_id)
+    if not project:
+        return jsonify({"success": False, "message": "项目不存在"}), 404
+    return jsonify(project)
+
+
+@app.route("/api/g3d/projects/<project_id>", methods=["PUT"])
+def g3d_update_project(project_id):
+    data = request.json
+    project = g3d_manager.update_project(
+        project_id,
+        name=data.get("name"),
+        description=data.get("description"),
+    )
+    if not project:
+        return jsonify({"success": False, "message": "项目不存在"}), 404
+    return jsonify({"success": True, "project": project})
+
+
+@app.route("/api/g3d/projects/<project_id>", methods=["DELETE"])
+def g3d_delete_project(project_id):
+    ok = g3d_manager.delete_project(project_id)
+    if not ok:
+        return jsonify({"success": False, "message": "项目不存在"}), 404
+    return jsonify({"success": True, "message": "项目已删除"})
+
+
+@app.route("/api/g3d/projects/<project_id>/upload", methods=["POST"])
+def g3d_upload_file(project_id):
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "未选择文件"}), 400
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"success": False, "message": "文件名为空"}), 400
+    result = g3d_manager.upload_file(project_id, file, file.filename)
+    return jsonify(result)
+
+
+@app.route("/api/g3d/projects/<project_id>/commits", methods=["GET"])
+def g3d_get_commits(project_id):
+    return jsonify(g3d_manager.get_commits(project_id))
+
+
+@app.route("/api/g3d/projects/<project_id>/commits", methods=["POST"])
+def g3d_create_commit(project_id):
+    data = request.json
+    if not data or not data.get("message"):
+        return jsonify({"success": False, "message": "提交信息不能为空"}), 400
+    result = g3d_manager.commit(
+        project_id,
+        message=data["message"],
+        author=data.get("author", ""),
+    )
+    return jsonify(result)
+
+
+@app.route("/api/g3d/projects/<project_id>/commits/<commit_id>", methods=["DELETE"])
+def g3d_delete_commit(project_id, commit_id):
+    result = g3d_manager.delete_commit(project_id, commit_id)
+    return jsonify(result)
+
+
+@app.route("/api/g3d/projects/<project_id>/commits/<commit_id>/files", methods=["GET"])
+def g3d_get_commit_files(project_id, commit_id):
+    return jsonify(g3d_manager.get_commit_files(project_id, commit_id))
+
+
+@app.route("/api/g3d/projects/<project_id>/download/<path:filename>")
+def g3d_download_file(project_id, filename):
+    commit_id = request.args.get("commit_id")
+    fpath = g3d_manager.download_file(project_id, filename, commit_id)
+    if not fpath:
+        return jsonify({"success": False, "message": "文件不存在"}), 404
+    return send_file(fpath, as_attachment=True, download_name=os.path.basename(filename))
+
+
+@app.route("/api/g3d/projects/<project_id>/staging", methods=["GET"])
+def g3d_get_staging(project_id):
+    return jsonify(g3d_manager.get_staging_files(project_id))
+
+
+@app.route("/api/g3d/projects/<project_id>/staging", methods=["DELETE"])
+def g3d_clear_staging(project_id):
+    return jsonify(g3d_manager.clear_staging(project_id))
+
+
+@app.route("/api/g3d/projects/<project_id>/staging/<path:filename>", methods=["DELETE"])
+def g3d_remove_staging_file(project_id, filename):
+    return jsonify(g3d_manager.remove_staging_file(project_id, filename))
 
 
 @socketio.on("connect")

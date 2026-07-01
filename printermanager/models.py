@@ -223,3 +223,27 @@ class Competition:
     end_date: str = ""
     location: str = ""
     notes: str = ""
+
+
+# ==================== G3D - Git for 3D Prints ====================
+
+@dataclass
+class G3DProject:
+    id: str
+    name: str
+    description: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    default_branch: str = "main"
+    file_count: int = 0
+    commit_count: int = 0
+
+
+@dataclass
+class G3DCommit:
+    id: str
+    project_id: str
+    message: str
+    author: str = ""
+    timestamp: str = ""
+    file_count: int = 0

@@ -99,6 +99,7 @@
     --accent-blue-dark: #1D4ED8;
     --accent-blue-light: #60A5FA;
     --accent-cyan: #06B6D4;
+    --accent-purple: #8B5CF6;
     --green: #10B981;
     --green-dark: #059669;
     --yellow: #F59E0B;
@@ -1747,6 +1748,141 @@ select.form-input {
     font-size: 10px;
     color: var(--text-muted);
     flex-shrink: 0;
+}
+
+.schedule-weights {
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+}
+
+.schedule-weight-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.schedule-weight-header:hover {
+    background: var(--bg-hover);
+}
+
+.schedule-weight-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.schedule-weight-chevron {
+    transition: transform 0.25s ease;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.schedule-weights.collapsed .schedule-weight-chevron {
+    transform: rotate(-90deg);
+}
+
+.schedule-weight-summary {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.schedule-weight-summary strong {
+    font-size: 15px;
+    color: var(--accent-blue);
+}
+
+.schedule-weight-body {
+    overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease, opacity 0.25s ease;
+    max-height: 300px;
+    padding: 0 18px 14px;
+    opacity: 1;
+}
+
+.schedule-weights.collapsed .schedule-weight-body {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+}
+
+.schedule-weight-items {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px 16px;
+}
+
+.schedule-weight-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    min-width: 0;
+}
+
+.schedule-weight-item label {
+    width: 70px;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.schedule-weight-item input[type="range"] {
+    flex: 1;
+    min-width: 60px;
+    height: 4px;
+    accent-color: var(--accent-blue);
+    cursor: pointer;
+}
+
+.schedule-weight-value {
+    width: 34px;
+    text-align: right;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text-primary);
+    flex-shrink: 0;
+}
+
+.schedule-weight-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.schedule-weight-footer .btn {
+    flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+    .schedule-weight-items {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .schedule-weight-items {
+        grid-template-columns: 1fr;
+    }
+    .schedule-weight-item label {
+        width: 60px;
+        font-size: 11px;
+    }
 }
 
 .schedule-legend {
@@ -3972,4 +4108,391 @@ select.form-input {
 
 .fm-tab-content {
     min-height: 400px;
+}
+
+/* ==================== G3D - Git for 3D Prints ==================== */
+
+.g3d-toolbar {
+    margin-bottom: 16px;
+}
+
+.g3d-project-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.g3d-project-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.g3d-project-card:hover {
+    border-color: var(--accent-purple);
+    box-shadow: 0 2px 12px rgba(139, 92, 246, 0.1);
+}
+
+.g3d-project-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #fff;
+}
+
+.g3d-project-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.g3d-project-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.g3d-project-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.g3d-project-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.g3d-project-meta span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.g3d-project-meta svg {
+    width: 14px;
+    height: 14px;
+}
+
+.g3d-project-date {
+    color: var(--text-muted);
+    font-size: 11px;
+    flex-shrink: 0;
+    width: 130px;
+    text-align: right;
+}
+
+.g3d-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+    gap: 12px;
+}
+
+.g3d-detail-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.g3d-detail-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+.g3d-col {
+    min-width: 0;
+}
+
+.g3d-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.g3d-staging-area {
+    margin-bottom: 20px;
+}
+
+.g3d-staging-upload {
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.g3d-staging-upload:hover {
+    border-color: var(--accent-purple);
+    background: rgba(139, 92, 246, 0.04);
+}
+
+.g3d-staging-files {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 10px;
+}
+
+.g3d-staging-file {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.g3d-staging-file .file-name {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+.g3d-staging-file .file-size {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.g3d-staging-file .file-remove {
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 2px;
+    border-radius: 4px;
+    transition: color 0.15s;
+}
+
+.g3d-staging-file .file-remove:hover {
+    color: var(--red);
+}
+
+.g3d-staging-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.g3d-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.g3d-file-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.g3d-file-item:hover {
+    background: var(--bg-hover);
+}
+
+.g3d-file-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+    color: #fff;
+}
+
+.g3d-file-icon.stl { background: #f59e0b; }
+.g3d-file-icon.3mf { background: #3b82f6; }
+.g3d-file-icon.step, .g3d-file-icon.stp { background: #10b981; }
+.g3d-file-icon.gcode { background: #ef4444; }
+.g3d-file-icon.f3d { background: #8b5cf6; }
+.g3d-file-icon.scad { background: #ec4899; }
+.g3d-file-icon.obj { background: #06b6d4; }
+
+.g3d-file-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.g3d-file-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.g3d-file-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.g3d-file-download {
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.15s;
+}
+
+.g3d-file-download:hover {
+    color: var(--accent-blue);
+}
+
+.g3d-commit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: relative;
+}
+
+.g3d-commit-list::before {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border-color);
+}
+
+.g3d-commit-item {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0;
+    position: relative;
+}
+
+.g3d-commit-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent-purple);
+    border: 2px solid var(--bg-primary);
+    flex-shrink: 0;
+    margin-top: 4px;
+    z-index: 1;
+    position: relative;
+    left: 10px;
+}
+
+.g3d-commit-body {
+    flex: 1;
+    padding-left: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.g3d-commit-message {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.g3d-commit-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.g3d-commit-id {
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    color: var(--accent-purple);
+    background: rgba(139, 92, 246, 0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.g3d-commit-files {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.g3d-commit-file-tag {
+    background: var(--bg-tertiary);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.g3d-commit-file-tag:hover {
+    background: var(--accent-purple);
+    color: #fff;
+}
+
+.g3d-commit-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.g3d-commit-actions .btn {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+@media (max-width: 768px) {
+    .g3d-detail-body {
+        grid-template-columns: 1fr;
+    }
+    .g3d-project-meta {
+        display: none;
+    }
+    .g3d-project-date {
+        display: none;
+    }
 }
